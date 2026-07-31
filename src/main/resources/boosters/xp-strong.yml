@@ -1,0 +1,25 @@
+target: FOLEVELS_XP
+type: PERSONAL
+multiplier: 3.0
+duration-seconds: 1800
+world: ""
+enabled-events:
+  - none
+material: EXPERIENCE_BOTTLE
+glow: true
+custom-model-data: 0
+name: "#03fc88sᴛʀᴏɴɢ ʟᴇᴠᴇʟ xᴘ ʙᴏᴏsᴛᴇʀ &8(&f{multiplier}x&8)"
+lore:
+  - ""
+  - "#03fc88ɪɴғᴏ"
+  - " &8❙ &fTarget: #03fc88{target}"
+  - " &8❙ &fScope: #03fc88{scope}"
+  - " &8❙ &fMultiplier: #03fc88{multiplier}x"
+  - " &8❙ &fDuration: #03fc88{duration}"
+  - ""
+  - "#a7b8b0Requires FoLevels."
+  - "#03fc88▶ #a7b8b0Right click &8- &fActivate"
+bossbar:
+  title: "#03fc88{multiplier_parts} #a7b8b0sᴛʀᴏɴɢ ʟᴇᴠᴇʟ xᴘ ʙᴏᴏsᴛᴇʀ &8- #ffffff{time}"
+  color: GREEN
+  style: SEGMENTED_10

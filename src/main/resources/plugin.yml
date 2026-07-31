@@ -1,0 +1,35 @@
+name: FoDropBooster
+description: Timed personal, team, global, and world drop and FoLevels XP boosters.
+version: '${version}'
+
+main: me.foesio.foDropBooster.FoDropBooster
+api-version: '1.21'
+
+authors: [ Carrotio ]
+softdepend:
+  - FoDrops
+  - FoAutoCollect
+  - FoTeams
+  - FoLevels
+  - PlaceholderAPI
+
+commands:
+  fodropboosteradmin:
+    description: FoDropBooster admin command.
+    usage: /<command> <version|reload|editor|give|removeactive>
+    aliases:
+      - dropboosteradmin
+      - dbadmin
+    permission: fodropbooster.admin
+  dropboosterbossbar:
+    description: Toggle your FoDropBooster bossbar.
+    usage: /<command> [on|off]
+    permission: fodropbooster.togglebossbar
+
+permissions:
+  fodropbooster.admin:
+    description: Allows managing FoDropBooster.
+    default: op
+  fodropbooster.togglebossbar:
+    description: Allows toggling the personal FoDropBooster bossbar.
+    default: true

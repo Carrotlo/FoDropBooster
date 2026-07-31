@@ -1,0 +1,28 @@
+target: DROPS
+type: PERSONAL
+multiplier: 2.0
+duration-seconds: 900
+world: ""
+enabled-events:
+  - block-break
+  - mob-kill
+  - fishing
+  - shearing
+  - explosions
+material: CLOCK
+glow: true
+custom-model-data: 0
+name: "#03fc88ʙᴀsɪᴄ ᴅʀᴏᴘ ʙᴏᴏsᴛᴇʀ &8(&f{multiplier}x&8)"
+lore:
+  - ""
+  - "#03fc88ɪɴғᴏ"
+  - " &8❙ &fTarget: #03fc88{target}"
+  - " &8❙ &fScope: #03fc88{scope}"
+  - " &8❙ &fMultiplier: #03fc88{multiplier}x"
+  - " &8❙ &fDuration: #03fc88{duration}"
+  - ""
+  - "#03fc88▶ #a7b8b0Right click &8- &fActivate"
+bossbar:
+  title: "#03fc88{multiplier}x #a7b8b0ʙᴀsɪᴄ ᴅʀᴏᴘ ʙᴏᴏsᴛᴇʀ &8- #ffffff{time}"
+  color: GREEN
+  style: SEGMENTED_10

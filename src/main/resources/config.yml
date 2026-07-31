@@ -1,0 +1,70 @@
+# Need help or want support? Join the Discord: https://discord.gg/kEF77QCfu7
+
+# Colors support Mini-style hex tokens like #03fc88 and legacy & codes.
+
+settings:
+  # When false, only the best applicable booster affects a player.
+  # When true, applicable boosters multiply together.
+  stack-boosters: false
+  number-format: "#,##0.##"
+  max-multiplied-amount: 4096
+  # Timed team booster items stack with other applicable boosters even when stack-boosters is false.
+  # Set this false if timed team boosters should only apply when no personal, world, or global booster applies.
+  team-boosters:
+    stack-with-other-boosters: true
+  # Hidden passive team multiplier. Requires FoTeams.
+  # If FoTeams is not installed, this feature is disabled automatically.
+  # This does not disable timed team booster items; it only controls the passive team-size multiplier.
+  team-multiplier:
+    enabled: true
+    per-online-member: 0.05
+    cap: 2.0
+
+native-dialogs:
+  # Uses Minecraft's native dialog/input screens for search and text/number input when supported.
+  # Requires a compatible Paper or Paper-fork server with the Dialog API.
+  # Spigot and older versions automatically fall back to inventory/chat GUI mode.
+  # Set this to false to always use inventory/chat GUI mode.
+  enabled: true
+
+  # Sends admins a short warning when native dialogs are enabled but unavailable and the plugin falls back.
+  warn-on-fallback: true
+
+events:
+  block-break: true
+  mob-kill: true
+  fishing: true
+  shearing: true
+  crafting: false
+  explosions: true
+
+disabled-worlds: []
+
+bossbar:
+  enabled: true
+  title: "#03fc88{multiplier_parts} #a7b8b0ᴅʀᴏᴘ ʙᴏᴏsᴛᴇʀ &8- #ffffff{time}"
+  level-xp-title: "#03fc88{multiplier_parts} #a7b8b0ʟᴇᴠᴇʟ xᴘ ʙᴏᴏsᴛᴇʀ &8- #ffffff{time}"
+  team-title: "#03fc88{team_multiplier}x #a7b8b0ᴛᴇᴀᴍ ᴅʀᴏᴘ ʙᴏᴏsᴛ"
+  team-level-xp-title: "#03fc88{team_multiplier}x #a7b8b0ᴛᴇᴀᴍ ʟᴇᴠᴇʟ xᴘ ʙᴏᴏsᴛ"
+  color: GREEN
+  style: SEGMENTED_10
+  update-ticks: 20
+
+custom-item:
+  material: CLOCK
+  glow: true
+  custom-model-data: 0
+  name: "#03fc88ᴄᴜsᴛᴏᴍ {target} ʙᴏᴏsᴛᴇʀ &8(&f{multiplier}x&8)"
+  lore:
+    - ""
+    - "#03fc88ɪɴғᴏ"
+    - " &8❙ &fTarget: #03fc88{target}"
+    - " &8❙ &fScope: #03fc88{scope}"
+    - " &8❙ &fMultiplier: #03fc88{multiplier}x"
+    - " &8❙ &fDuration: #03fc88{duration}"
+    - ""
+    - "#03fc88▶ #a7b8b0Right click &8- &fActivate"
+
+broadcast:
+  global: true
+  world: true
