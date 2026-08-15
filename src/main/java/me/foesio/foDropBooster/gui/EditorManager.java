@@ -8,6 +8,10 @@ import me.foesio.core.dialog.NativeDialogAvailability;
 import me.foesio.core.dialog.TextDialogRequest;
 import me.foesio.core.editor.EditorDialogInputs;
 import me.foesio.core.editor.EditorItemFactory;
+import me.foesio.core.gui.EntryBrowserClick;
+import me.foesio.core.gui.EntryBrowserHolder;
+import me.foesio.core.gui.EntryBrowserMenus;
+import me.foesio.core.gui.EntryBrowserRequest;
 import me.foesio.core.gui.GuiButtonConfig;
 import me.foesio.core.gui.GuiSlots;
 import me.foesio.core.gui.GuiTitles;
@@ -185,37 +189,28 @@ public final class EditorManager implements Listener {
     }
 
     private void openBoosters(Player player, BoosterTarget target) {
-        MenuHolder holder = new MenuHolder(MenuType.BOOSTERS, target.name());
-        Inventory inventory = Bukkit.createInventory(holder, 54, title("boosters", "Boosters"));
-        holder.inventory = inventory;
-        fill(inventory);
+        openBoosters(player, target, 0, "");
+    }
 
-        int slot = 10;
+    private void openBoosters(Player player, BoosterTarget target, int page, String filter) {
+        List<EntryBrowserRequest.Entry> entries = new ArrayList<>();
         for (String id : configManager.boosterIds()) {
             BoosterProfile profile = configManager.profile(id);
-            if (profile == null || profile.target() != target) {
-                continue;
+            if (profile != null && profile.target() == target && matchesBoosterFilter(id, profile, filter)) {
+                entries.add(EntryBrowserRequest.Entry.of(id, boosterEntryItem(id, profile)));
             }
-            if (slot == 17 || slot == 26 || slot == 35) {
-                slot += 2;
-            }
-            if (slot >= 44) {
-                break;
-            }
-            inventory.setItem(slot, item(profile.material(), "#03fc88" + id, List.of(
-                    "#ffffffTarget: #03fc88" + profile.target().display(),
-                    "#ffffffType: #03fc88" + profile.type().display(),
-                    "#ffffffMultiplier: #03fc88" + activeBoosterService.formatMultiplier(profile.multiplier()) + "x",
-                    "#ffffffDuration: #03fc88" + FormatUtil.duration(profile.durationSeconds()),
-                    "",
-                    "#a7b8b0Click to edit."
-            )));
-            slot++;
         }
-
-        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back());
-        inventory.setItem(50, item(Material.LIME_DYE, "#3ecf8eAdd Booster", List.of("#ffffffCreate a new booster preset.")));
-        player.openInventory(inventory);
+        EntryBrowserRequest request = EntryBrowserRequest.builder()
+                .title(title("boosters", "Boosters"))
+                .entries(entries)
+                .page(page)
+                .filter(filter)
+                .buttons(buttons)
+                .showBack(true)
+                .addButton(item(Material.ANVIL, "#3ecf8eAdd Booster", List.of("#ffffffCreate a new booster preset.")))
+                .context(new BoosterBrowserContext(target))
+                .build();
+        EntryBrowserMenus.open(player, request);
     }
 
     private void openBooster(Player player, String id) {
@@ -321,43 +316,27 @@ public final class EditorManager implements Listener {
     }
 
     private void openActive(Player player, BoosterTarget filter) {
-        MenuHolder holder = new MenuHolder(MenuType.ACTIVE, filter.name());
-        Inventory inventory = Bukkit.createInventory(holder, 54, title("active", "Active Boosters"));
-        holder.inventory = inventory;
-        fill(inventory);
+        openActive(player, filter, 0, "");
+    }
 
-        int slot = 10;
-        for (ActiveBooster booster : activeBoosterService.activeBoosters()) {
-            if (booster.target() != filter) {
-                continue;
-            }
-            if (slot == 17 || slot == 26 || slot == 35) {
-                slot += 2;
-            }
-            if (slot >= 44) {
-                break;
-            }
-            String target = switch (booster.type()) {
-                case PERSONAL -> booster.ownerName();
-                case TEAM -> booster.teamName();
-                case WORLD -> booster.worldName();
-                case GLOBAL -> "server";
-            };
-            inventory.setItem(slot, item(Material.BEACON, "#03fc88" + booster.id().substring(0, 8), List.of(
-                    "#ffffffSystem: #03fc88" + booster.target().display(),
-                    "#ffffffType: #03fc88" + booster.type().display(),
-                    "#ffffffScope: #03fc88" + target,
-                    "#ffffffMultiplier: #03fc88" + activeBoosterService.formatMultiplier(booster.multiplier()) + "x",
-                    "#ffffffRemaining: #03fc88" + FormatUtil.duration(booster.remainingMillis(System.currentTimeMillis()) / 1000L),
-                    "",
-                    "#ff5d73Click to remove."
-            )));
-            slot++;
-        }
-
-        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back());
-        inventory.setItem(50, item(Material.SUNFLOWER, "#03fc88Refresh", List.of("#ffffffRefresh active boosters.")));
-        player.openInventory(inventory);
+    private void openActive(Player player, BoosterTarget target, int page, String filter) {
+        List<EntryBrowserRequest.Entry> entries = activeBoosterService.activeBoosters().stream()
+                .filter(booster -> booster.target() == target)
+                .filter(booster -> matchesActiveFilter(booster, filter))
+                .map(booster -> EntryBrowserRequest.Entry.of(booster.id(), activeBoosterEntryItem(booster)))
+                .toList();
+        EntryBrowserRequest request = EntryBrowserRequest.builder()
+                .title(title("active", "Active Boosters"))
+                .entries(entries)
+                .page(page)
+                .filter(filter)
+                .buttons(buttons)
+                .showBack(true)
+                .extraButton(item(Material.SUNFLOWER, "#03fc88Refresh", List.of("#ffffffRefresh active boosters.")))
+                .withoutAddButton()
+                .context(new ActiveBoosterBrowserContext(target))
+                .build();
+        EntryBrowserMenus.open(player, request);
     }
 
     @EventHandler
@@ -366,6 +345,13 @@ public final class EditorManager implements Listener {
             return;
         }
         InventoryHolder inventoryHolder = event.getInventory().getHolder();
+        if (inventoryHolder instanceof EntryBrowserHolder holder) {
+            event.setCancelled(true);
+            if (event.getClickedInventory() == event.getView().getTopInventory()) {
+                handleEntryBrowserClick(player, holder, event);
+            }
+            return;
+        }
         if (!(inventoryHolder instanceof MaterialChooserHolder
                 || inventoryHolder instanceof TriStateSelectionHolder
                 || inventoryHolder instanceof MenuHolder)) {
@@ -392,16 +378,17 @@ public final class EditorManager implements Listener {
         switch (holder.type) {
             case SELECTOR -> clickSelector(player, slot);
             case MAIN -> clickMain(player, target(holder.value), slot);
-            case BOOSTERS -> clickBoosters(player, target(holder.value), slot);
             case BOOSTER -> clickBooster(player, holder.value, slot);
-            case ACTIVE -> clickActive(player, target(holder.value), slot);
         }
     }
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
         InventoryHolder holder = event.getInventory().getHolder();
-        if (!(holder instanceof MenuHolder || holder instanceof MaterialChooserHolder || holder instanceof TriStateSelectionHolder)) {
+        if (!(holder instanceof EntryBrowserHolder
+                || holder instanceof MenuHolder
+                || holder instanceof MaterialChooserHolder
+                || holder instanceof TriStateSelectionHolder)) {
             return;
         }
         int topSize = event.getInventory().getSize();
@@ -409,6 +396,74 @@ public final class EditorManager implements Listener {
             if (slot < topSize) {
                 event.setCancelled(true);
                 return;
+            }
+        }
+    }
+
+    private void handleEntryBrowserClick(Player player, EntryBrowserHolder holder, InventoryClickEvent event) {
+        EntryBrowserClick click = EntryBrowserMenus.handleClick(event.getRawSlot(), holder, event.getClick());
+        if (holder.request().context() instanceof BoosterBrowserContext context) {
+            handleBoosterBrowserClick(player, holder, click, context);
+        } else if (holder.request().context() instanceof ActiveBoosterBrowserContext context) {
+            handleActiveBoosterBrowserClick(player, holder, click, context);
+        }
+    }
+
+    private void handleBoosterBrowserClick(Player player, EntryBrowserHolder holder, EntryBrowserClick click, BoosterBrowserContext context) {
+        int page = holder.request().page();
+        String filter = holder.request().filter();
+        switch (click.action()) {
+            case ENTRY -> {
+                if (click.entryId() != null && configManager.hasBooster(click.entryId())) {
+                    openBooster(player, click.entryId());
+                }
+            }
+            case ADD -> prompt(player, "editor-text-input", "New Booster ID", "new booster id, example weekend", "",
+                    () -> openBoosters(player, context.target(), page, filter),
+                    input -> createBooster(player, context.target(), input, page, filter));
+            case BACK -> openTargetMain(player, context.target());
+            case SEARCH -> openSearchPrompt(
+                    player,
+                    "Search Boosters",
+                    "booster id or name",
+                    filter,
+                    () -> openBoosters(player, context.target(), page, filter),
+                    input -> openBoosters(player, context.target(), 0, input));
+            case CLEAR_SEARCH -> openBoosters(player, context.target(), 0, "");
+            case PREVIOUS_PAGE -> openBoosters(player, context.target(), page - 1, filter);
+            case NEXT_PAGE -> openBoosters(player, context.target(), page + 1, filter);
+            case EXTRA, NONE -> {
+            }
+        }
+    }
+
+    private void handleActiveBoosterBrowserClick(Player player, EntryBrowserHolder holder, EntryBrowserClick click, ActiveBoosterBrowserContext context) {
+        int page = holder.request().page();
+        String filter = holder.request().filter();
+        switch (click.action()) {
+            case ENTRY -> {
+                if (click.entryId() == null) {
+                    return;
+                }
+                int removed = activeBoosterService.removeById(click.entryId());
+                if (removed > 0) {
+                    messages.send(player, "messages.removed-active", Map.of("amount", Integer.toString(removed)));
+                }
+                openActive(player, context.target(), page, filter);
+            }
+            case BACK -> openTargetMain(player, context.target());
+            case EXTRA -> openActive(player, context.target(), page, filter);
+            case SEARCH -> openSearchPrompt(
+                    player,
+                    "Search Active Boosters",
+                    "booster id, owner, team, or world",
+                    filter,
+                    () -> openActive(player, context.target(), page, filter),
+                    input -> openActive(player, context.target(), 0, input));
+            case CLEAR_SEARCH -> openActive(player, context.target(), 0, "");
+            case PREVIOUS_PAGE -> openActive(player, context.target(), page - 1, filter);
+            case NEXT_PAGE -> openActive(player, context.target(), page + 1, filter);
+            case ADD, NONE -> {
             }
         }
     }
@@ -473,21 +528,6 @@ public final class EditorManager implements Listener {
             case 22 -> openMain(player);
             default -> {
             }
-        }
-    }
-
-    private void clickBoosters(Player player, BoosterTarget target, int slot) {
-        if (slot == 49) {
-            openTargetMain(player, target);
-            return;
-        }
-        if (slot == 50) {
-            prompt(player, "editor-text-input", "New Booster ID", "new booster id, example weekend", "", () -> openBoosters(player, target), input -> createBooster(player, target, input));
-            return;
-        }
-        String id = boosterBySlot(slot, target);
-        if (id != null) {
-            openBooster(player, id);
         }
     }
 
@@ -562,25 +602,6 @@ public final class EditorManager implements Listener {
             case 40 -> openBoosters(player, profile.target());
             default -> {
             }
-        }
-    }
-
-    private void clickActive(Player player, BoosterTarget target, int slot) {
-        if (slot == 49) {
-            openTargetMain(player, target);
-            return;
-        }
-        if (slot == 50) {
-            openActive(player, target);
-            return;
-        }
-        ActiveBooster booster = activeBySlot(slot, target);
-        if (booster != null) {
-            int removed = activeBoosterService.removeById(booster.id());
-            if (removed > 0) {
-                messages.send(player, "messages.removed-active", Map.of("amount", Integer.toString(removed)));
-            }
-            openActive(player, target);
         }
     }
 
@@ -882,16 +903,16 @@ public final class EditorManager implements Listener {
         messages.send(player, "messages.editor-saved", Map.of("setting", "events"));
     }
 
-    private void createBooster(Player player, BoosterTarget target, String input) {
+    private void createBooster(Player player, BoosterTarget target, String input, int returnPage, String returnFilter) {
         String id = configManager.normalizeId(input);
         if (!id.matches("[a-z0-9_-]{2,32}")) {
             messages.send(player, "messages.invalid-id");
-            openBoosters(player, target);
+            openBoosters(player, target, returnPage, returnFilter);
             return;
         }
         if (configManager.hasBooster(id)) {
             messages.send(player, "messages.booster-exists");
-            openBoosters(player, target);
+            openBoosters(player, target, returnPage, returnFilter);
             return;
         }
         configManager.createBooster(id, target);
@@ -1120,45 +1141,55 @@ public final class EditorManager implements Listener {
         return EditorItemFactory.item(material, name, lore);
     }
 
-    private String boosterBySlot(int slot, BoosterTarget target) {
-        int currentSlot = 10;
-        for (String id : configManager.boosterIds()) {
-            BoosterProfile profile = configManager.profile(id);
-            if (profile == null || profile.target() != target) {
-                continue;
-            }
-            if (currentSlot == 17 || currentSlot == 26 || currentSlot == 35) {
-                currentSlot += 2;
-            }
-            if (currentSlot >= 44) {
-                return null;
-            }
-            if (currentSlot == slot) {
-                return id;
-            }
-            currentSlot++;
-        }
-        return null;
+    private ItemStack boosterEntryItem(String id, BoosterProfile profile) {
+        return item(profile.material(), "#03fc88" + id, List.of(
+                "#ffffffTarget: #03fc88" + profile.target().display(),
+                "#ffffffType: #03fc88" + profile.type().display(),
+                "#ffffffMultiplier: #03fc88" + activeBoosterService.formatMultiplier(profile.multiplier()) + "x",
+                "#ffffffDuration: #03fc88" + FormatUtil.duration(profile.durationSeconds()),
+                "",
+                "#a7b8b0Click to edit."
+        ));
     }
 
-    private ActiveBooster activeBySlot(int slot, BoosterTarget target) {
-        int currentSlot = 10;
-        for (ActiveBooster booster : activeBoosterService.activeBoosters()) {
-            if (booster.target() != target) {
-                continue;
-            }
-            if (currentSlot == 17 || currentSlot == 26 || currentSlot == 35) {
-                currentSlot += 2;
-            }
-            if (currentSlot >= 44) {
-                return null;
-            }
-            if (currentSlot == slot) {
-                return booster;
-            }
-            currentSlot++;
-        }
-        return null;
+    private boolean matchesBoosterFilter(String id, BoosterProfile profile, String filter) {
+        String query = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        return query.isBlank()
+                || id.toLowerCase(Locale.ROOT).contains(query)
+                || profile.name().toLowerCase(Locale.ROOT).contains(query)
+                || profile.type().display().toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private ItemStack activeBoosterEntryItem(ActiveBooster booster) {
+        String scope = switch (booster.type()) {
+            case PERSONAL -> booster.ownerName();
+            case TEAM -> booster.teamName();
+            case WORLD -> booster.worldName();
+            case GLOBAL -> "server";
+        };
+        return item(Material.BEACON, "#03fc88" + booster.id().substring(0, Math.min(8, booster.id().length())), List.of(
+                "#ffffffSystem: #03fc88" + booster.target().display(),
+                "#ffffffType: #03fc88" + booster.type().display(),
+                "#ffffffScope: #03fc88" + scope,
+                "#ffffffMultiplier: #03fc88" + activeBoosterService.formatMultiplier(booster.multiplier()) + "x",
+                "#ffffffRemaining: #03fc88" + FormatUtil.duration(booster.remainingMillis(System.currentTimeMillis()) / 1000L),
+                "",
+                "#ff5d73Click to remove."
+        ));
+    }
+
+    private boolean matchesActiveFilter(ActiveBooster booster, String filter) {
+        String query = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        String scope = switch (booster.type()) {
+            case PERSONAL -> booster.ownerName();
+            case TEAM -> booster.teamName();
+            case WORLD -> booster.worldName();
+            case GLOBAL -> "server";
+        };
+        return query.isBlank()
+                || booster.id().toLowerCase(Locale.ROOT).contains(query)
+                || booster.type().display().toLowerCase(Locale.ROOT).contains(query)
+                || scope.toLowerCase(Locale.ROOT).contains(query);
     }
 
     private String title(String key, String fallback) {
@@ -1230,9 +1261,13 @@ public final class EditorManager implements Listener {
     private enum MenuType {
         SELECTOR,
         MAIN,
-        BOOSTERS,
-        BOOSTER,
-        ACTIVE
+        BOOSTER
+    }
+
+    private record BoosterBrowserContext(BoosterTarget target) {
+    }
+
+    private record ActiveBoosterBrowserContext(BoosterTarget target) {
     }
 
     private static final class MenuHolder implements InventoryHolder {
