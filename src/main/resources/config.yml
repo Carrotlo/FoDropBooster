@@ -13,6 +13,7 @@ settings:
   team-boosters:
     stack-with-other-boosters: true
   # Hidden passive team multiplier. Requires FoTeams.
+  # Counts additional online teammates only, so one online team member adds no bonus.
   # If FoTeams is not installed, this feature is disabled automatically.
   # This does not disable timed team booster items; it only controls the passive team-size multiplier.
   team-multiplier:

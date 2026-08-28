@@ -2,6 +2,7 @@ package me.foesio.foDropBooster.command;
 
 import me.foesio.core.command.FoAdminArguments;
 import me.foesio.core.message.FoMessageService;
+import me.foesio.core.sound.FoAdminSounds;
 import me.foesio.foDropBooster.bossbar.BossbarService;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -14,16 +15,19 @@ import java.util.List;
 public final class DropBoosterBossbarCommand implements CommandExecutor, TabCompleter {
     private final FoMessageService messages;
     private final BossbarService bossbarService;
+    private final FoAdminSounds adminSounds;
 
-    public DropBoosterBossbarCommand(FoMessageService messages, BossbarService bossbarService) {
+    public DropBoosterBossbarCommand(FoMessageService messages, BossbarService bossbarService, FoAdminSounds adminSounds) {
         this.messages = messages;
         this.bossbarService = bossbarService;
+        this.adminSounds = adminSounds;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("fodropbooster.togglebossbar")) {
             messages.send(sender, "messages.no-permission");
+            adminSounds.updateError(sender);
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -32,6 +36,7 @@ public final class DropBoosterBossbarCommand implements CommandExecutor, TabComp
         }
         if (args.length > 1) {
             messages.send(sender, "messages.bossbar-usage");
+            adminSounds.updateError(sender);
             return true;
         }
 
@@ -42,6 +47,7 @@ public final class DropBoosterBossbarCommand implements CommandExecutor, TabComp
             var requested = FoAdminArguments.onOff().parse(args[0]);
             if (requested.isEmpty()) {
                 messages.send(sender, "messages.bossbar-usage");
+                adminSounds.updateError(sender);
                 return true;
             }
             enabled = bossbarService.setEnabled(player, requested.get());

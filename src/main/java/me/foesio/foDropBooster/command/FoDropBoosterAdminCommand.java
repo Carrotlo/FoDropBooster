@@ -5,6 +5,7 @@ import me.foesio.core.inventory.InventoryDepositService;
 import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.number.LargeNumberParser;
+import me.foesio.core.sound.FoAdminSounds;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foDropBooster.FoDropBooster;
 import me.foesio.foDropBooster.booster.ActiveBoosterService;
@@ -28,11 +29,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalDouble;
+import java.util.logging.Level;
 
 public final class FoDropBoosterAdminCommand implements CommandExecutor, TabCompleter {
     private final FoDropBooster plugin;
     private final ConfigManager configManager;
     private final FoMessageService messages;
+    private final FoAdminSounds adminSounds;
     private final BoosterItemService boosterItemService;
     private final ActiveBoosterService activeBoosterService;
     private final EditorManager editorManager;
@@ -43,6 +46,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             FoDropBooster plugin,
             ConfigManager configManager,
             FoMessageService messages,
+            FoAdminSounds adminSounds,
             BoosterItemService boosterItemService,
             ActiveBoosterService activeBoosterService,
             EditorManager editorManager,
@@ -52,6 +56,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
         this.plugin = plugin;
         this.configManager = configManager;
         this.messages = messages;
+        this.adminSounds = adminSounds;
         this.boosterItemService = boosterItemService;
         this.activeBoosterService = activeBoosterService;
         this.editorManager = editorManager;
@@ -63,6 +68,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("fodropbooster.admin")) {
             messages.send(sender, "messages.no-permission");
+            adminSounds.updateError(sender);
             return true;
         }
         if (args.length == 0) {
@@ -76,7 +82,10 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             case "editor" -> editor(sender);
             case "give" -> give(sender, args);
             case "removeactive" -> removeActive(sender, args);
-            default -> help(sender);
+            default -> {
+                adminSounds.updateError(sender);
+                help(sender);
+            }
         }
         return true;
     }
@@ -86,8 +95,23 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
     }
 
     private void reload(CommandSender sender) {
-        plugin.reloadFiles();
-        messages.send(sender, "messages.reload");
+        try {
+            plugin.reloadFiles();
+            messages.send(sender, "messages.reload");
+            if (sender instanceof Player player) {
+                adminSounds.reload(player);
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to reload FoDropBooster.", exception);
+            messages.send(sender, "messages.reload-failed", "{prefix}{bad}Reload failed: {error}", Map.of("error", reloadError(exception)));
+            if (sender instanceof Player player) {
+                adminSounds.reloadError(player);
+            }
+        }
+    }
+
+    private String reloadError(RuntimeException exception) {
+        return exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
     }
 
     private void editor(CommandSender sender) {
@@ -100,12 +124,12 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
 
     private void give(CommandSender sender, String[] args) {
         if (args.length < 4) {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return;
         }
         Player target = FoAdminArguments.onlinePlayer().parse(args[1]).orElse(null);
         if (target == null) {
-            messages.send(sender, "messages.invalid-player");
+            error(sender, "messages.invalid-player");
             return;
         }
 
@@ -115,16 +139,16 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
         if (mode.equals("preset")) {
             String boosterId = configManager.normalizeId(args[3]);
             if (!configManager.hasBooster(boosterId)) {
-                messages.send(sender, "messages.booster-missing");
+                error(sender, "messages.booster-missing");
                 return;
             }
             if (configManager.profile(boosterId).target().isFoLevels() && !foLevelsAvailable()) {
-                messages.send(sender, "messages.folevels-required");
+                error(sender, "messages.folevels-required");
                 return;
             }
             amount = parseAmount(args, 4);
             if (amount < 1) {
-                messages.send(sender, "messages.invalid-number");
+                error(sender, "messages.invalid-number");
                 return;
             }
             item = boosterItemService.createBooster(boosterId);
@@ -136,12 +160,12 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             amount = custom.amount();
             item = boosterItemService.createCustom(custom.target(), custom.type(), custom.multiplier(), custom.durationSeconds(), custom.worldName());
         } else {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return;
         }
 
         if (amount < 1 || amount > 2304) {
-            messages.send(sender, "messages.invalid-number");
+            error(sender, "messages.invalid-number");
             return;
         }
         for (int i = 0; i < amount; i++) {
@@ -155,7 +179,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
 
     private CustomGive parseCustom(CommandSender sender, String[] args) {
         if (args.length < 6) {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return null;
         }
         BoosterTarget target = BoosterTarget.DROPS;
@@ -165,11 +189,11 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             typeIndex = 4;
         }
         if (args.length <= typeIndex + 2) {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return null;
         }
         if (target.isFoLevels() && !foLevelsAvailable()) {
-            messages.send(sender, "messages.folevels-required");
+            error(sender, "messages.folevels-required");
             return null;
         }
         BoosterType type = switch (args[typeIndex].toLowerCase(Locale.ROOT)) {
@@ -180,18 +204,18 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             default -> null;
         };
         if (type == null) {
-            messages.send(sender, "messages.invalid-type");
+            error(sender, "messages.invalid-type");
             return null;
         }
 
         OptionalDouble multiplier = LargeNumberParser.parseDouble(args[typeIndex + 1]);
         if (multiplier.isEmpty() || multiplier.getAsDouble() <= 1D) {
-            messages.send(sender, "messages.invalid-number");
+            error(sender, "messages.invalid-number");
             return null;
         }
         Long duration = FormatUtil.parseDurationSeconds(args[typeIndex + 2]);
         if (duration == null) {
-            messages.send(sender, "messages.invalid-duration");
+            error(sender, "messages.invalid-duration");
             return null;
         }
 
@@ -203,7 +227,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             } else {
                 World world = Bukkit.getWorld(args[amountIndex]);
                 if (world == null) {
-                    messages.send(sender, "messages.invalid-world");
+                    error(sender, "messages.invalid-world");
                     return null;
                 }
                 worldName = world.getName();
@@ -212,7 +236,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
         }
         int amount = parseAmount(args, amountIndex);
         if (amount < 1) {
-            messages.send(sender, "messages.invalid-number");
+            error(sender, "messages.invalid-number");
             return null;
         }
         return new CustomGive(target, type, multiplier.getAsDouble(), duration, worldName, amount);
@@ -220,7 +244,7 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
 
     private void removeActive(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return;
         }
         String scope = args[1].toLowerCase(Locale.ROOT);
@@ -234,11 +258,11 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
             default -> -1;
         };
         if (removed < 0) {
-            messages.send(sender, "messages.usage");
+            error(sender, "messages.usage");
             return;
         }
         if (removed == 0) {
-            messages.send(sender, "messages.no-active");
+            error(sender, "messages.no-active");
             return;
         }
         messages.send(sender, "messages.removed-active", Map.of("amount", Integer.toString(removed)));
@@ -253,6 +277,11 @@ public final class FoDropBoosterAdminCommand implements CommandExecutor, TabComp
                 "{prefix}{theme}/dbadmin give <player> custom [drop|xp] <personal|team|global|world> <multiplier> <duration> [world|current] [amount] {muted}- Give a custom booster.",
                 "{prefix}{theme}/dbadmin removeactive <personal|team|world|global|id> <target> {muted}- Remove active boosters."
         ), Map.of());
+    }
+
+    private void error(CommandSender sender, String key) {
+        messages.send(sender, key);
+        adminSounds.updateError(sender);
     }
 
     @Override

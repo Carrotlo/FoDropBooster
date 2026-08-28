@@ -1,6 +1,7 @@
 package me.foesio.foDropBooster.listener;
 
 import me.foesio.core.message.FoMessageService;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDropBooster.booster.ActivationResult;
 import me.foesio.foDropBooster.booster.ActiveBooster;
 import me.foesio.foDropBooster.booster.ActiveBoosterService;
@@ -28,6 +29,7 @@ import java.util.Optional;
 public final class BoosterItemListener implements Listener {
     private final ConfigManager configManager;
     private final FoMessageService messages;
+    private final FoSoundService sounds;
     private final BoosterItemService boosterItemService;
     private final ActiveBoosterService activeBoosterService;
     private final BossbarService bossbarService;
@@ -35,12 +37,14 @@ public final class BoosterItemListener implements Listener {
     public BoosterItemListener(
             ConfigManager configManager,
             FoMessageService messages,
+            FoSoundService sounds,
             BoosterItemService boosterItemService,
             ActiveBoosterService activeBoosterService,
             BossbarService bossbarService
     ) {
         this.configManager = configManager;
         this.messages = messages;
+        this.sounds = sounds;
         this.boosterItemService = boosterItemService;
         this.activeBoosterService = activeBoosterService;
         this.bossbarService = bossbarService;
@@ -67,11 +71,13 @@ public final class BoosterItemListener implements Listener {
         ActivationResult result = activeBoosterService.activate(player, data.get());
         if (!result.success()) {
             messages.send(player, "messages." + result.messageKey(), activationFallback(result.messageKey()));
+            sounds.play(player, "booster.activate-error");
             return;
         }
 
         consumeOne(player, item);
         ActiveBooster booster = result.booster();
+        sounds.playWithPitchVariation(player, "booster.activate", 0.05f);
         messages.send(player, "messages.activated", replacements(player, booster));
         if (booster.type() == BoosterType.GLOBAL && configManager.config().getBoolean("broadcast.global", true)) {
             Bukkit.broadcastMessage(messages.render(

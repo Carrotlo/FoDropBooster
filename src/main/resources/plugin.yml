@@ -20,11 +20,9 @@ commands:
     aliases:
       - dropboosteradmin
       - dbadmin
-    permission: fodropbooster.admin
   dropboosterbossbar:
     description: Toggle your FoDropBooster bossbar.
     usage: /<command> [on|off]
-    permission: fodropbooster.togglebossbar
 
 permissions:
   fodropbooster.admin:

@@ -7,6 +7,11 @@ import me.foesio.core.message.FoMessageService;
 import me.foesio.core.placeholder.FoPlaceholders;
 import me.foesio.core.reload.FoReloadRegistry;
 import me.foesio.core.reload.FoReloadResult;
+import me.foesio.core.sound.FoAdminSounds;
+import me.foesio.core.sound.FoEditorSounds;
+import me.foesio.core.sound.FoSound;
+import me.foesio.core.sound.FoSoundMigrations;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foDropBooster.api.DefaultFoDropBoosterApi;
 import me.foesio.foDropBooster.api.FoDropBoosterApi;
@@ -26,6 +31,7 @@ import me.foesio.foDropBooster.listener.BoosterItemListener;
 import me.foesio.foDropBooster.listener.DropBoostListener;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
+import org.bukkit.SoundCategory;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -37,6 +43,9 @@ public final class FoDropBooster extends JavaPlugin {
 
     private FoCoreContext core;
     private ConfigManager configManager;
+    private FoSoundService sounds;
+    private FoAdminSounds adminSounds;
+    private FoEditorSounds editorSounds;
     private FoMessageService messages;
     private BoosterItemService boosterItemService;
     private ActiveBoosterService activeBoosterService;
@@ -50,23 +59,26 @@ public final class FoDropBooster extends JavaPlugin {
     public void onEnable() {
         configManager = new ConfigManager(this);
         configManager.load();
-        messages = FoMessageService.load(this, messageMigrations());
         reloadCoreContext();
+        sounds = core.createSounds(soundMigrations());
+        adminSounds = FoAdminSounds.create(sounds);
+        editorSounds = FoEditorSounds.create(sounds);
+        messages = FoMessageService.load(this, messageMigrations());
         boosterItemService = new BoosterItemService(this, configManager);
         foTeamsHook = new FoTeamsHook(this);
-        activeBoosterService = new ActiveBoosterService(this, core.scheduler(), configManager, messages, foTeamsHook);
+        activeBoosterService = new ActiveBoosterService(this, core.scheduler(), configManager, messages, sounds, foTeamsHook);
         activeBoosterService.start();
         api = new DefaultFoDropBoosterApi(activeBoosterService);
         getServer().getServicesManager().register(FoDropBoosterApi.class, api, this, ServicePriority.Normal);
         bossbarService = new BossbarService(core.scheduler(), configManager, activeBoosterService);
         bossbarService.start();
-        updateNotices = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID).start();
+        updateNotices = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID, adminSounds).start();
 
         DropBoostListener dropBoostListener = new DropBoostListener(core.scheduler(), configManager, activeBoosterService);
-        editorManager = new EditorManager(this, core, configManager, messages, boosterItemService, activeBoosterService);
+        editorManager = new EditorManager(this, core, editorSounds, configManager, messages, boosterItemService, activeBoosterService);
         getServer().getPluginManager().registerEvents(editorManager, this);
         getServer().getPluginManager().registerEvents(new BoosterCacheListener(activeBoosterService), this);
-        getServer().getPluginManager().registerEvents(new BoosterItemListener(configManager, messages, boosterItemService, activeBoosterService, bossbarService), this);
+        getServer().getPluginManager().registerEvents(new BoosterItemListener(configManager, messages, sounds, boosterItemService, activeBoosterService, bossbarService), this);
         getServer().getPluginManager().registerEvents(dropBoostListener, this);
         new FoDropsRewardBridge(this, dropBoostListener).register();
         new FoLevelsXpBridge(this, activeBoosterService).register();
@@ -77,7 +89,7 @@ public final class FoDropBooster extends JavaPlugin {
             getLogger().info("Hooked into FoTeams teams.");
         }
 
-        FoDropBoosterAdminCommand adminCommand = new FoDropBoosterAdminCommand(this, configManager, messages, boosterItemService, activeBoosterService, editorManager, updateNotices, core.inventoryDeposits());
+        FoDropBoosterAdminCommand adminCommand = new FoDropBoosterAdminCommand(this, configManager, messages, adminSounds, boosterItemService, activeBoosterService, editorManager, updateNotices, core.inventoryDeposits());
         PluginCommand command = getCommand("fodropboosteradmin");
         if (command != null) {
             command.setExecutor(adminCommand);
@@ -85,7 +97,7 @@ public final class FoDropBooster extends JavaPlugin {
         } else {
             getLogger().severe("Command 'fodropboosteradmin' is missing from plugin.yml.");
         }
-        DropBoosterBossbarCommand bossbarCommand = new DropBoosterBossbarCommand(messages, bossbarService);
+        DropBoosterBossbarCommand bossbarCommand = new DropBoosterBossbarCommand(messages, bossbarService, adminSounds);
         PluginCommand bossbarToggleCommand = getCommand("dropboosterbossbar");
         if (bossbarToggleCommand != null) {
             bossbarToggleCommand.setExecutor(bossbarCommand);
@@ -125,8 +137,9 @@ public final class FoDropBooster extends JavaPlugin {
         FoReloadResult result = FoReloadRegistry.create()
                 .add("config", configManager::load)
                 .add("core", this::reloadCoreContext)
+                .add("sounds", sounds::reload)
                 .addMessages(messages)
-                .add("editor", () -> editorManager.reload(core))
+                .add("editor", () -> editorManager.reload(core, editorSounds))
                 .add("active boosters", activeBoosterService::reload)
                 .add("bossbar", bossbarService::restart)
                 .reload();
@@ -178,5 +191,75 @@ public final class FoDropBooster extends JavaPlugin {
                 .removeIfMemorySectionString("native-dialogs")
                 .removeIfMemorySectionString("editor")
                 .build();
+    }
+
+    private FoSoundMigrations soundMigrations() {
+        return FoSoundMigrations.create()
+                .move("editor.next-page", "editor.page-next")
+                .move("editor.previous-page", "editor.page-previous")
+                .replaceIfMatches("editor.open",
+                        sound("BLOCK_NOTE_BLOCK_PLING", SoundCategory.PLAYERS, 0.45f, 1.35f),
+                        sound("BLOCK_VAULT_OPEN_SHUTTER", SoundCategory.MASTER, 0.55f, 1.0f))
+                .replaceIfMatches("editor.back",
+                        sound("UI_BUTTON_CLICK", SoundCategory.PLAYERS, 0.35f, 0.85f),
+                        sound("BLOCK_VAULT_CLOSE_SHUTTER", SoundCategory.MASTER, 0.55f, 0.95f))
+                .replaceIfMatches("editor.page-next",
+                        sound("UI_BUTTON_CLICK", SoundCategory.PLAYERS, 0.35f, 1.2f),
+                        sound("BLOCK_BAMBOO_WOOD_BUTTON_CLICK_ON", SoundCategory.MASTER, 0.55f, 1.1f))
+                .replaceIfMatches("editor.page-previous",
+                        sound("UI_BUTTON_CLICK", SoundCategory.PLAYERS, 0.35f, 0.95f),
+                        sound("BLOCK_CHERRY_WOOD_BUTTON_CLICK_OFF", SoundCategory.MASTER, 0.55f, 0.95f))
+                .replaceIfMatches("editor.search",
+                        sound("BLOCK_NOTE_BLOCK_HAT", SoundCategory.PLAYERS, 0.35f, 1.25f),
+                        sound("BLOCK_CRAFTER_CRAFT", SoundCategory.MASTER, 0.55f, 1.0f))
+                .replaceIfMatches("editor.clear-search",
+                        sound("BLOCK_NOTE_BLOCK_HAT", SoundCategory.PLAYERS, 0.35f, 0.85f),
+                        sound("BLOCK_COPPER_BULB_TURN_OFF", SoundCategory.MASTER, 0.55f, 1.0f))
+                .replaceIfMatches("editor.toggle-on",
+                        sound("BLOCK_LEVER_CLICK", SoundCategory.PLAYERS, 0.4f, 1.25f),
+                        sound("BLOCK_VAULT_INSERT_ITEM", SoundCategory.MASTER, 1.0f, 1.5f))
+                .replaceIfMatches("editor.toggle-off",
+                        sound("BLOCK_LEVER_CLICK", SoundCategory.PLAYERS, 0.4f, 0.75f),
+                        sound("BLOCK_VAULT_INSERT_ITEM_FAIL", SoundCategory.MASTER, 1.0f, 1.5f))
+                .replaceIfMatches("editor.add",
+                        sound("ENTITY_ITEM_PICKUP", SoundCategory.PLAYERS, 0.45f, 1.2f),
+                        sound("BLOCK_VAULT_INSERT_ITEM", SoundCategory.MASTER, 0.55f, 1.1f))
+                .replaceIfMatches("editor.delete",
+                        sound("ENTITY_ITEM_BREAK", SoundCategory.PLAYERS, 0.45f, 0.9f),
+                        sound("BLOCK_VAULT_EJECT_ITEM", SoundCategory.MASTER, 0.6f, 0.9f))
+                .replaceIfMatches("editor.cycle",
+                        sound("UI_BUTTON_CLICK", SoundCategory.PLAYERS, 0.35f, 1.4f),
+                        sound("BLOCK_COPPER_BULB_TURN_ON", SoundCategory.MASTER, 1.0f, 0.5f))
+                .replaceIfMatches("editor.save",
+                        sound("ENTITY_EXPERIENCE_ORB_PICKUP", SoundCategory.PLAYERS, 0.4f, 1.4f),
+                        sound("BLOCK_VAULT_ACTIVATE", SoundCategory.MASTER, 0.65f, 1.0f))
+                .replaceIfMatches("editor.error",
+                        sound("ENTITY_VILLAGER_NO", SoundCategory.PLAYERS, 0.45f, 0.85f),
+                        sound("BLOCK_VAULT_INSERT_ITEM_FAIL", SoundCategory.MASTER, 0.75f, 1.0f))
+                .replaceIfMatches("admin.reload",
+                        sound("BLOCK_NOTE_BLOCK_PLING", SoundCategory.PLAYERS, 0.5f, 1.25f),
+                        sound("BLOCK_BEACON_ACTIVATE", SoundCategory.MASTER, 0.8f, 1.2f))
+                .replaceIfMatches("admin.reload-error",
+                        sound("ENTITY_VILLAGER_NO", SoundCategory.PLAYERS, 0.5f, 0.75f),
+                        sound("BLOCK_TRIAL_SPAWNER_OMINOUS_ACTIVATE", SoundCategory.MASTER, 0.8f, 0.9f))
+                .replaceIfMatches("admin.update-latest",
+                        sound("BLOCK_NOTE_BLOCK_PLING", SoundCategory.PLAYERS, 0.45f, 1.4f),
+                        sound("BLOCK_TRIAL_SPAWNER_EJECT_ITEM", SoundCategory.MASTER, 0.8f, 1.0f))
+                .replaceIfMatches("admin.update-available",
+                        sound("ENTITY_PLAYER_LEVELUP", SoundCategory.PLAYERS, 0.55f, 1.1f),
+                        sound("BLOCK_TRIAL_SPAWNER_OPEN_SHUTTER", SoundCategory.MASTER, 0.7f, 0.9f))
+                .replaceIfMatches("admin.update-error",
+                        sound("ENTITY_VILLAGER_NO", SoundCategory.PLAYERS, 0.45f, 0.8f),
+                        sound("BLOCK_TRIAL_SPAWNER_DETECT_PLAYER", SoundCategory.MASTER, 0.8f, 1.0f))
+                .replaceIfMatches("booster.activate-error",
+                        sound("ENTITY_VILLAGER_NO", SoundCategory.PLAYERS, 0.45f, 0.8f),
+                        sound("BLOCK_VAULT_INSERT_ITEM_FAIL", SoundCategory.PLAYERS, 0.75f, 1.0f))
+                .remove("editor.add-item")
+                .remove("editor.add-item-error")
+                .build();
+    }
+
+    private static FoSound sound(String key, SoundCategory category, float volume, float pitch) {
+        return new FoSound(key, category, volume, pitch, true);
     }
 }

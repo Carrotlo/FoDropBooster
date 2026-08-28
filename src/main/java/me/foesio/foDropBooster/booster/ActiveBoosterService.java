@@ -2,6 +2,7 @@ package me.foesio.foDropBooster.booster;
 
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.scheduler.FoScheduler;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDropBooster.config.ConfigManager;
 import me.foesio.foDropBooster.hook.FoTeamsHook;
 import me.foesio.foDropBooster.util.FormatUtil;
@@ -33,6 +34,7 @@ public final class ActiveBoosterService {
     private final FoScheduler scheduler;
     private final ConfigManager configManager;
     private final FoMessageService messages;
+    private final FoSoundService sounds;
     private final FoTeamsHook foTeamsHook;
     private final Map<String, ActiveBooster> active = new LinkedHashMap<>();
     private final Map<ExternalBoostKey, ExternalBoost> externalBoosts = new HashMap<>();
@@ -41,11 +43,12 @@ public final class ActiveBoosterService {
     private boolean cleanupRunning;
     private long cleanupGeneration;
 
-    public ActiveBoosterService(JavaPlugin plugin, FoScheduler scheduler, ConfigManager configManager, FoMessageService messages, FoTeamsHook foTeamsHook) {
+    public ActiveBoosterService(JavaPlugin plugin, FoScheduler scheduler, ConfigManager configManager, FoMessageService messages, FoSoundService sounds, FoTeamsHook foTeamsHook) {
         this.plugin = plugin;
         this.scheduler = scheduler;
         this.configManager = configManager;
         this.messages = messages;
+        this.sounds = sounds;
         this.foTeamsHook = foTeamsHook;
     }
 
@@ -574,10 +577,11 @@ public final class ActiveBoosterService {
         if (!configManager.teamMultiplierEnabled()) {
             return 1D;
         }
-        if (onlineMembers <= 0) {
+        int bonusMembers = Math.max(0, onlineMembers - 1);
+        if (bonusMembers <= 0) {
             return 1D;
         }
-        double multiplier = 1D + configManager.teamMultiplierPerOnlineMember() * onlineMembers;
+        double multiplier = 1D + configManager.teamMultiplierPerOnlineMember() * bonusMembers;
         return Math.max(1D, Math.min(configManager.teamMultiplierCap(), multiplier));
     }
 
@@ -678,6 +682,7 @@ public final class ActiveBoosterService {
                 Player player = Bukkit.getPlayer(booster.ownerId());
                 if (player != null) {
                     messages.send(player, "messages.expired");
+                    sounds.play(player, "booster.expire");
                 }
             }
         }

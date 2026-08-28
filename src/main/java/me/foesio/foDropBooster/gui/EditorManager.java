@@ -34,6 +34,7 @@ import me.foesio.core.selector.TriStateSelectionRequest;
 import me.foesio.core.selector.TriStateSelectionState;
 import me.foesio.core.selector.TriStateSelections;
 import me.foesio.core.selector.WorldSelectionEntries;
+import me.foesio.core.sound.FoEditorSounds;
 import me.foesio.foDropBooster.booster.ActiveBooster;
 import me.foesio.foDropBooster.booster.ActiveBoosterService;
 import me.foesio.foDropBooster.booster.BoosterItemService;
@@ -87,6 +88,7 @@ public final class EditorManager implements Listener {
     private final BoosterItemService boosterItemService;
     private final ActiveBoosterService activeBoosterService;
     private final GuiButtonConfig buttons = GuiButtonConfig.defaults();
+    private FoEditorSounds editorSounds;
     private final Set<UUID> warnedDialogFallbackPlayers = ConcurrentHashMap.newKeySet();
     private final Map<UUID, PendingPrompt> pendingPrompts = new ConcurrentHashMap<>();
     private final Map<UUID, BoosterTarget> worldSelectorTargets = new ConcurrentHashMap<>();
@@ -99,6 +101,7 @@ public final class EditorManager implements Listener {
     public EditorManager(
             JavaPlugin plugin,
             FoCoreContext core,
+            FoEditorSounds editorSounds,
             ConfigManager configManager,
             FoMessageService messages,
             BoosterItemService boosterItemService,
@@ -110,6 +113,7 @@ public final class EditorManager implements Listener {
         this.boosterItemService = boosterItemService;
         this.activeBoosterService = activeBoosterService;
         this.core = core;
+        this.editorSounds = editorSounds;
         this.dialogService = createDialogService(core);
     }
 
@@ -122,8 +126,9 @@ public final class EditorManager implements Listener {
         eventSelectorTargets.clear();
     }
 
-    public void reload(FoCoreContext core) {
+    public void reload(FoCoreContext core, FoEditorSounds editorSounds) {
         this.core = core;
+        this.editorSounds = editorSounds;
         this.dialogService = createDialogService(core);
         warnedDialogFallbackPlayers.clear();
         pendingPrompts.clear();
@@ -134,6 +139,10 @@ public final class EditorManager implements Listener {
     }
 
     public void openMain(Player player) {
+        openMain(player, true);
+    }
+
+    private void openMain(Player player, boolean playSound) {
         MenuHolder holder = new MenuHolder(MenuType.SELECTOR, null);
         Inventory inventory = Bukkit.createInventory(holder, 27, title("editor", "FoDropBooster"));
         holder.inventory = inventory;
@@ -150,8 +159,11 @@ public final class EditorManager implements Listener {
                 List.of(
                         "#ffffffBoost FoLevels XP gains.",
                         foLevels ? "#a7b8b0Click to manage level XP boosters." : "#ff5d73FoLevels is required for the leveling system."
-                )));
+        )));
         player.openInventory(inventory);
+        if (playSound) {
+            editorSounds.open(player);
+        }
     }
 
     private void openTargetMain(Player player, BoosterTarget target) {
@@ -216,7 +228,7 @@ public final class EditorManager implements Listener {
     private void openBooster(Player player, String id) {
         BoosterProfile profile = configManager.profile(id);
         if (profile == null) {
-            openMain(player);
+            openMain(player, false);
             return;
         }
         MenuHolder holder = new MenuHolder(MenuType.BOOSTER, id);
@@ -255,7 +267,7 @@ public final class EditorManager implements Listener {
     private void openBoosterEvents(Player player, String id) {
         BoosterProfile profile = configManager.profile(id);
         if (profile == null) {
-            openMain(player);
+            openMain(player, false);
             return;
         }
         TriStateSelectionRequest request = TriStateSelectionRequest.builder()
@@ -416,22 +428,38 @@ public final class EditorManager implements Listener {
             case ENTRY -> {
                 if (click.entryId() != null && configManager.hasBooster(click.entryId())) {
                     openBooster(player, click.entryId());
+                    editorSounds.open(player);
                 }
             }
             case ADD -> prompt(player, "editor-text-input", "New Booster ID", "new booster id, example weekend", "",
                     () -> openBoosters(player, context.target(), page, filter),
                     input -> createBooster(player, context.target(), input, page, filter));
-            case BACK -> openTargetMain(player, context.target());
-            case SEARCH -> openSearchPrompt(
-                    player,
-                    "Search Boosters",
-                    "booster id or name",
-                    filter,
-                    () -> openBoosters(player, context.target(), page, filter),
-                    input -> openBoosters(player, context.target(), 0, input));
-            case CLEAR_SEARCH -> openBoosters(player, context.target(), 0, "");
-            case PREVIOUS_PAGE -> openBoosters(player, context.target(), page - 1, filter);
-            case NEXT_PAGE -> openBoosters(player, context.target(), page + 1, filter);
+            case BACK -> {
+                editorSounds.back(player);
+                openTargetMain(player, context.target());
+            }
+            case SEARCH -> {
+                editorSounds.search(player);
+                openSearchPrompt(
+                        player,
+                        "Search Boosters",
+                        "booster id or name",
+                        filter,
+                        () -> openBoosters(player, context.target(), page, filter),
+                        input -> openBoosters(player, context.target(), 0, input));
+            }
+            case CLEAR_SEARCH -> {
+                editorSounds.clearSearch(player);
+                openBoosters(player, context.target(), 0, "");
+            }
+            case PREVIOUS_PAGE -> {
+                editorSounds.previousPage(player);
+                openBoosters(player, context.target(), page - 1, filter);
+            }
+            case NEXT_PAGE -> {
+                editorSounds.nextPage(player);
+                openBoosters(player, context.target(), page + 1, filter);
+            }
             case EXTRA, NONE -> {
             }
         }
@@ -448,21 +476,37 @@ public final class EditorManager implements Listener {
                 int removed = activeBoosterService.removeById(click.entryId());
                 if (removed > 0) {
                     messages.send(player, "messages.removed-active", Map.of("amount", Integer.toString(removed)));
+                    editorSounds.delete(player);
                 }
                 openActive(player, context.target(), page, filter);
             }
-            case BACK -> openTargetMain(player, context.target());
+            case BACK -> {
+                editorSounds.back(player);
+                openTargetMain(player, context.target());
+            }
             case EXTRA -> openActive(player, context.target(), page, filter);
-            case SEARCH -> openSearchPrompt(
-                    player,
-                    "Search Active Boosters",
-                    "booster id, owner, team, or world",
-                    filter,
-                    () -> openActive(player, context.target(), page, filter),
-                    input -> openActive(player, context.target(), 0, input));
-            case CLEAR_SEARCH -> openActive(player, context.target(), 0, "");
-            case PREVIOUS_PAGE -> openActive(player, context.target(), page - 1, filter);
-            case NEXT_PAGE -> openActive(player, context.target(), page + 1, filter);
+            case SEARCH -> {
+                editorSounds.search(player);
+                openSearchPrompt(
+                        player,
+                        "Search Active Boosters",
+                        "booster id, owner, team, or world",
+                        filter,
+                        () -> openActive(player, context.target(), page, filter),
+                        input -> openActive(player, context.target(), 0, input));
+            }
+            case CLEAR_SEARCH -> {
+                editorSounds.clearSearch(player);
+                openActive(player, context.target(), 0, "");
+            }
+            case PREVIOUS_PAGE -> {
+                editorSounds.previousPage(player);
+                openActive(player, context.target(), page - 1, filter);
+            }
+            case NEXT_PAGE -> {
+                editorSounds.nextPage(player);
+                openActive(player, context.target(), page + 1, filter);
+            }
             case ADD, NONE -> {
             }
         }
@@ -492,14 +536,19 @@ public final class EditorManager implements Listener {
 
     private void clickSelector(Player player, int slot) {
         switch (slot) {
-            case 11 -> openTargetMain(player, BoosterTarget.DROPS);
+            case 11 -> {
+                openTargetMain(player, BoosterTarget.DROPS);
+                editorSounds.open(player);
+            }
             case 15 -> {
                 if (!foLevelsAvailable()) {
                     messages.send(player, "messages.folevels-required");
-                    openMain(player);
+                    editorSounds.error(player);
+                    openMain(player, false);
                     return;
                 }
                 openTargetMain(player, BoosterTarget.FOLEVELS_XP);
+                editorSounds.open(player);
             }
             default -> {
             }
@@ -508,10 +557,17 @@ public final class EditorManager implements Listener {
 
     private void clickMain(Player player, BoosterTarget target, int slot) {
         switch (slot) {
-            case 10 -> openBoosters(player, target);
-            case 11 -> openActive(player, target);
+            case 10 -> {
+                openBoosters(player, target);
+                editorSounds.open(player);
+            }
+            case 11 -> {
+                openActive(player, target);
+                editorSounds.open(player);
+            }
             case 12 -> {
                 openDisabledWorlds(player, target);
+                editorSounds.open(player);
             }
             case 13 -> toggleConfig(player, "settings.stack-boosters", "stack-boosters", () -> openTargetMain(player, target));
             case 14 -> {
@@ -523,9 +579,13 @@ public final class EditorManager implements Listener {
             case 16 -> {
                 if (target == BoosterTarget.DROPS) {
                     openGlobalEvents(player, target);
+                    editorSounds.open(player);
                 }
             }
-            case 22 -> openMain(player);
+            case 22 -> {
+                editorSounds.back(player);
+                openMain(player, false);
+            }
             default -> {
             }
         }
@@ -533,12 +593,15 @@ public final class EditorManager implements Listener {
 
     private void clickBooster(Player player, String id, int slot) {
         if (id == null || !configManager.hasBooster(id)) {
-            openMain(player);
+            openMain(player, false);
             return;
         }
         BoosterProfile profile = configManager.profile(id);
         switch (slot) {
-            case 10 -> openMaterialSelector(player, id);
+            case 10 -> {
+                openMaterialSelector(player, id);
+                editorSounds.open(player);
+            }
             case 11 -> toggleBooster(player, id, "glow", id + ".glow", () -> openBooster(player, id));
             case 12 -> prompt(player, "editor-number-input", "Custom Model Data", "custom model data number, or 0 to disable", Integer.toString(profile.customModelData()), () -> openBooster(player, id), input -> {
                 Integer value = FormatUtil.parseInteger(input);
@@ -546,6 +609,7 @@ public final class EditorManager implements Listener {
                     saveBooster(player, id, "custom-model-data", value, id + ".custom-model-data");
                 } else {
                     messages.send(player, "messages.invalid-number");
+                    editorSounds.error(player);
                 }
                 openBooster(player, id);
             });
@@ -556,7 +620,9 @@ public final class EditorManager implements Listener {
                     case GLOBAL -> BoosterType.WORLD;
                     case WORLD -> BoosterType.PERSONAL;
                 };
-                saveBooster(player, id, "type", next.name(), id + ".type");
+                configManager.setBoosterValue(id, "type", next.name());
+                messages.send(player, "messages.editor-saved", Map.of("setting", id + ".type"));
+                editorSounds.cycle(player);
                 openBooster(player, id);
             }
             case 14 -> prompt(player, "editor-number-input", "Multiplier", "decimal multiplier above 1, example 2.5", Double.toString(profile.multiplier()), () -> openBooster(player, id), input -> {
@@ -565,6 +631,7 @@ public final class EditorManager implements Listener {
                     saveBooster(player, id, "multiplier", value.getAsDouble(), id + ".multiplier");
                 } else {
                     messages.send(player, "messages.invalid-number");
+                    editorSounds.error(player);
                 }
                 openBooster(player, id);
             });
@@ -574,6 +641,7 @@ public final class EditorManager implements Listener {
                     saveBooster(player, id, "duration-seconds", value, id + ".duration");
                 } else {
                     messages.send(player, "messages.invalid-duration");
+                    editorSounds.error(player);
                 }
                 openBooster(player, id);
             });
@@ -596,10 +664,14 @@ public final class EditorManager implements Listener {
             case 24 -> {
                 if (!profile.target().isFoLevels()) {
                     openBoosterEvents(player, id);
+                    editorSounds.open(player);
                 }
             }
             case 31 -> prompt(player, "editor-confirm-input", "Delete Booster", "delete", id, () -> openBooster(player, id), input -> deleteBooster(player, id, input));
-            case 40 -> openBoosters(player, profile.target());
+            case 40 -> {
+                editorSounds.back(player);
+                openBoosters(player, profile.target());
+            }
             default -> {
             }
         }
@@ -608,7 +680,7 @@ public final class EditorManager implements Listener {
     private void openMaterialSelector(Player player, String id) {
         BoosterProfile profile = configManager.profile(id);
         if (profile == null) {
-            openMain(player);
+            openMain(player, false);
             return;
         }
         MaterialChooserRequest request = MaterialChooserRequest.builder()
@@ -637,7 +709,7 @@ public final class EditorManager implements Listener {
         String id = materialSelectorBoosters.get(player.getUniqueId());
         if (id == null || !configManager.hasBooster(id)) {
             materialSelectorBoosters.remove(player.getUniqueId());
-            openMain(player);
+            openMain(player, false);
             return;
         }
         MaterialChooserActionType action = click.action();
@@ -646,16 +718,19 @@ public final class EditorManager implements Listener {
         }
         if (action == MaterialChooserActionType.BACK) {
             materialSelectorBoosters.remove(player.getUniqueId());
+            editorSounds.back(player);
             openBooster(player, id);
             return;
         }
         if (action == MaterialChooserActionType.SEARCH) {
+            editorSounds.search(player);
             openMaterialSearch(player, id, click.nextRequest());
             return;
         }
         if (action == MaterialChooserActionType.PREVIOUS_PAGE
                 || action == MaterialChooserActionType.NEXT_PAGE
                 || action == MaterialChooserActionType.CLEAR_SEARCH) {
+            playMaterialNavigationSound(player, action);
             openMaterialSelector(player, id, click.nextRequest());
             return;
         }
@@ -728,20 +803,26 @@ public final class EditorManager implements Listener {
         }
         if (action == TriStateSelectionActionType.BACK) {
             worldSelectorTargets.remove(player.getUniqueId());
+            editorSounds.back(player);
             openTargetMain(player, target);
             return;
         }
         if (action == TriStateSelectionActionType.SEARCH) {
+            editorSounds.search(player);
             openWorldSearch(player, target, click.nextRequest());
             return;
         }
         if (action == TriStateSelectionActionType.TOGGLE) {
             saveDisabledWorlds(player, click.nextRequest());
+            editorSounds.cycle(player);
         }
         if (action == TriStateSelectionActionType.PREVIOUS_PAGE
                 || action == TriStateSelectionActionType.NEXT_PAGE
                 || action == TriStateSelectionActionType.CLEAR_SEARCH
                 || action == TriStateSelectionActionType.TOGGLE) {
+            if (action != TriStateSelectionActionType.TOGGLE) {
+                playTriStateNavigationSound(player, action);
+            }
             openWorldSelector(player, target, click.nextRequest());
         }
     }
@@ -749,7 +830,7 @@ public final class EditorManager implements Listener {
     private void handleEventSelectionClick(Player player, String id, TriStateSelectionClick click) {
         if (!configManager.hasBooster(id)) {
             eventSelectorBoosters.remove(player.getUniqueId());
-            openMain(player);
+            openMain(player, false);
             return;
         }
         TriStateSelectionActionType action = click.action();
@@ -758,17 +839,22 @@ public final class EditorManager implements Listener {
         }
         if (action == TriStateSelectionActionType.BACK) {
             eventSelectorBoosters.remove(player.getUniqueId());
+            editorSounds.back(player);
             openBooster(player, id);
             return;
         }
         if (action == TriStateSelectionActionType.TOGGLE) {
             configManager.setBoosterValue(id, "enabled-events", eventKeys(click.nextRequest()));
             messages.send(player, "messages.editor-saved", Map.of("setting", id + ".enabled-events"));
+            editorSounds.toggle(player, click.newState() == TriStateSelectionState.ENABLED);
         }
         if (action == TriStateSelectionActionType.PREVIOUS_PAGE
                 || action == TriStateSelectionActionType.NEXT_PAGE
                 || action == TriStateSelectionActionType.CLEAR_SEARCH
                 || action == TriStateSelectionActionType.TOGGLE) {
+            if (action != TriStateSelectionActionType.TOGGLE) {
+                playTriStateNavigationSound(player, action);
+            }
             openEventSelector(player, id, click.nextRequest());
         }
     }
@@ -780,17 +866,42 @@ public final class EditorManager implements Listener {
         }
         if (action == TriStateSelectionActionType.BACK) {
             eventSelectorTargets.remove(player.getUniqueId());
+            editorSounds.back(player);
             openTargetMain(player, target);
             return;
         }
         if (action == TriStateSelectionActionType.TOGGLE) {
             saveGlobalEvents(player, click.nextRequest());
+            editorSounds.toggle(player, click.newState() == TriStateSelectionState.ENABLED);
         }
         if (action == TriStateSelectionActionType.PREVIOUS_PAGE
                 || action == TriStateSelectionActionType.NEXT_PAGE
                 || action == TriStateSelectionActionType.CLEAR_SEARCH
                 || action == TriStateSelectionActionType.TOGGLE) {
+            if (action != TriStateSelectionActionType.TOGGLE) {
+                playTriStateNavigationSound(player, action);
+            }
             openGlobalEventSelector(player, target, click.nextRequest());
+        }
+    }
+
+    private void playMaterialNavigationSound(Player player, MaterialChooserActionType action) {
+        switch (action) {
+            case PREVIOUS_PAGE -> editorSounds.previousPage(player);
+            case NEXT_PAGE -> editorSounds.nextPage(player);
+            case CLEAR_SEARCH -> editorSounds.clearSearch(player);
+            default -> {
+            }
+        }
+    }
+
+    private void playTriStateNavigationSound(Player player, TriStateSelectionActionType action) {
+        switch (action) {
+            case PREVIOUS_PAGE -> editorSounds.previousPage(player);
+            case NEXT_PAGE -> editorSounds.nextPage(player);
+            case CLEAR_SEARCH -> editorSounds.clearSearch(player);
+            default -> {
+            }
         }
     }
 
@@ -821,18 +932,7 @@ public final class EditorManager implements Listener {
                 true,
                 false
         );
-        boolean openedNative = EditorDialogInputs.openTextFromInventory(
-                plugin,
-                core.inventoryCloseSuppressor(),
-                dialogService,
-                player,
-                request,
-                consumer,
-                reopen
-        );
-        if (!openedNative) {
-            warnDialogFallback(player);
-        }
+        openEditorInput(player, request, consumer, reopen, "search");
     }
 
     private void saveDisabledWorlds(Player player, TriStateSelectionRequest request) {
@@ -907,16 +1007,19 @@ public final class EditorManager implements Listener {
         String id = configManager.normalizeId(input);
         if (!id.matches("[a-z0-9_-]{2,32}")) {
             messages.send(player, "messages.invalid-id");
+            editorSounds.error(player);
             openBoosters(player, target, returnPage, returnFilter);
             return;
         }
         if (configManager.hasBooster(id)) {
             messages.send(player, "messages.booster-exists");
+            editorSounds.error(player);
             openBoosters(player, target, returnPage, returnFilter);
             return;
         }
         configManager.createBooster(id, target);
         messages.send(player, "messages.editor-created", Map.of("booster", id));
+        editorSounds.add(player);
         openBooster(player, id);
     }
 
@@ -928,30 +1031,47 @@ public final class EditorManager implements Listener {
         }
         if (configManager.boosterIds().size() <= 1) {
             messages.send(player, "messages.cannot-delete-last-booster");
+            editorSounds.error(player);
             openBooster(player, id);
             return;
         }
         configManager.deleteBooster(id);
         messages.send(player, "messages.editor-deleted", Map.of("booster", id));
-        openMain(player);
+        editorSounds.delete(player);
+        openMain(player, false);
     }
 
     private void prompt(Player player, String dialogId, String title, String format, String currentValue, Runnable reopen, Consumer<String> consumer) {
         TextDialogRequest request = dialogRequest(dialogId, title, format, currentValue);
-        boolean openedNative = EditorDialogInputs.openTextFromInventory(
-                plugin,
-                core.inventoryCloseSuppressor(),
-                dialogService,
-                player,
-                request,
-                consumer,
-                () -> {
-                    messages.send(player, "messages.editor-cancelled");
-                    reopen.run();
-                }
-        );
-        if (!openedNative) {
-            warnDialogFallback(player);
+        openEditorInput(player, request, consumer, () -> {
+            messages.send(player, "messages.editor-cancelled");
+            reopen.run();
+        }, title);
+    }
+
+    private void openEditorInput(Player player, TextDialogRequest request, Consumer<String> onSubmit, Runnable onCancel, String type) {
+        try {
+            boolean openedNative = EditorDialogInputs.openTextFromInventory(
+                    plugin,
+                    core.inventoryCloseSuppressor(),
+                    dialogService,
+                    player,
+                    request,
+                    input -> onSubmit.accept(input == null ? "" : input.trim()),
+                    () -> {
+                        editorSounds.back(player);
+                        onCancel.run();
+                    }
+            );
+            if (openedNative) {
+                editorSounds.open(player);
+            } else {
+                warnDialogFallback(player);
+            }
+        } catch (RuntimeException | LinkageError exception) {
+            plugin.getLogger().warning("Editor " + type + " input failed: " + exception.getMessage());
+            editorSounds.error(player);
+            onCancel.run();
         }
     }
 
@@ -1091,19 +1211,23 @@ public final class EditorManager implements Listener {
         configManager.setConfigValue(path, newValue);
         activeBoosterService.invalidateAll();
         messages.send(player, "messages.editor-saved", Map.of("setting", setting));
+        editorSounds.toggle(player, newValue);
         reopen.run();
     }
 
     private void toggleBooster(Player player, String id, String path, String setting, Runnable reopen) {
         YamlConfiguration booster = configManager.booster(id);
         boolean newValue = !booster.getBoolean(path, false);
-        saveBooster(player, id, path, newValue, setting);
+        configManager.setBoosterValue(id, path, newValue);
+        messages.send(player, "messages.editor-saved", Map.of("setting", setting));
+        editorSounds.toggle(player, newValue);
         reopen.run();
     }
 
     private void saveBooster(Player player, String id, String path, Object value, String setting) {
         configManager.setBoosterValue(id, path, value);
         messages.send(player, "messages.editor-saved", Map.of("setting", setting));
+        editorSounds.save(player);
     }
 
     private ItemStack teamMultiplierItem() {
@@ -1111,8 +1235,8 @@ public final class EditorManager implements Listener {
         String color = enabled ? "#3ecf8e" : "#ff5d73";
         String status = enabled ? "Enabled" : "Disabled";
         return item(Material.PLAYER_HEAD, color + "Team Multiplier", List.of(
-                "#ffffffHidden passive multiplier from online team members.",
-                "#ffffffPer member: #03fc88" + activeBoosterService.formatMultiplier(configManager.teamMultiplierPerOnlineMember()) + "x",
+                "#ffffffHidden passive multiplier from additional online teammates.",
+                "#ffffffPer extra member: #03fc88" + activeBoosterService.formatMultiplier(configManager.teamMultiplierPerOnlineMember()) + "x",
                 "#ffffffCap: #03fc88" + activeBoosterService.formatMultiplier(configManager.teamMultiplierCap()) + "x",
                 "",
                 "#a7b8b0Requires FoTeams.",

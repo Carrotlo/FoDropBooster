@@ -31,6 +31,7 @@ messages:
   booster-missing: "{prefix}{bad}That booster does not exist."
   cannot-delete-last-booster: "{prefix}{bad}You must keep at least one booster preset."
   reload: "{prefix}{good}Reloaded files."
+  reload-failed: "{prefix}{bad}Reload failed: {error}"
   give: "{prefix}{good}Gave {theme}{amount}x {muted}booster to {theme}{player}{muted}."
   received: "{prefix}{good}You received {theme}{amount}x {muted}booster."
   stacked-item: "{prefix}{bad}Unstack this booster before using it."
