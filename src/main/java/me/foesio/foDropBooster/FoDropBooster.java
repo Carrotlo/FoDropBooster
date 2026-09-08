@@ -64,6 +64,7 @@ public final class FoDropBooster extends JavaPlugin {
         adminSounds = FoAdminSounds.create(sounds);
         editorSounds = FoEditorSounds.create(sounds);
         messages = FoMessageService.load(this, messageMigrations());
+        migrateSprites();
         boosterItemService = new BoosterItemService(this, configManager);
         foTeamsHook = new FoTeamsHook(this);
         activeBoosterService = new ActiveBoosterService(this, core.scheduler(), configManager, messages, sounds, foTeamsHook);
@@ -191,6 +192,29 @@ public final class FoDropBooster extends JavaPlugin {
                 .removeIfMemorySectionString("native-dialogs")
                 .removeIfMemorySectionString("editor")
                 .build();
+    }
+
+    private void migrateSprites() {
+        messages.migrateToVersion(core.migrations(), 1, config -> {
+            boolean changed = false;
+            changed |= FoMessageService.addMissingToken(config, "tokens.prefix", ":experience_bottle:", null);
+            changed |= FoMessageService.addMissingToken(config, "messages.reload", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "messages.reload-failed", ":redstone:");
+            changed |= FoMessageService.addMissingToken(config, "messages.give", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "messages.received", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "messages.activated", ":experience_bottle:");
+            changed |= FoMessageService.addMissingToken(config, "messages.expired", ":clock:");
+            changed |= FoMessageService.addMissingToken(config, "messages.removed-active", ":lava_bucket:");
+            changed |= FoMessageService.addMissingToken(config, "messages.editor-saved", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "messages.editor-created", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "messages.editor-deleted", ":lava_bucket:");
+            return true;
+        });
+        messages.migrateToVersion(core.migrations(), 2, config -> {
+            FoMessageService.addMissingToken(config, "messages.activated-global", ":experience_bottle:");
+            FoMessageService.addMissingToken(config, "messages.activated-world", ":experience_bottle:");
+            return true;
+        });
     }
 
     private FoSoundMigrations soundMigrations() {

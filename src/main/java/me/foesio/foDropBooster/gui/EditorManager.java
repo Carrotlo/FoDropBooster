@@ -148,18 +148,23 @@ public final class EditorManager implements Listener {
         holder.inventory = inventory;
         fill(inventory);
 
-        inventory.setItem(11, item(Material.CLOCK, "#03fc88Drop Boosters", List.of(
+        inventory.setItem(11, button(player, FoStyle.THEME, Material.CLOCK, "Drop Boosters", List.of(
                 "#ffffffBoost vanilla, FoDrops, and FoAutoCollect drops.",
                 "#a7b8b0Click to manage drop boosters."
-        )));
+        ), "manage drop boosters"));
 
         boolean foLevels = foLevelsAvailable();
-        inventory.setItem(15, item(foLevels ? Material.EXPERIENCE_BOTTLE : Material.BARRIER,
-                (foLevels ? "#03fc88" : "#ff5d73") + "FoLevels XP Boosters",
-                List.of(
-                        "#ffffffBoost FoLevels XP gains.",
-                        foLevels ? "#a7b8b0Click to manage level XP boosters." : "#ff5d73FoLevels is required for the leveling system."
-        )));
+        if (foLevels) {
+            inventory.setItem(15, button(player, FoStyle.THEME, Material.EXPERIENCE_BOTTLE, "FoLevels XP Boosters", List.of(
+                    "#ffffffBoost FoLevels XP gains.",
+                    "#a7b8b0Click to manage level XP boosters."
+            ), "manage FoLevels XP boosters"));
+        } else {
+            inventory.setItem(15, EditorItemFactory.item(player, Material.EXPERIENCE_BOTTLE, "#ff5d73FoLevels XP Boosters", List.of(
+                    "#ffffffBoost FoLevels XP gains.",
+                    "#ff5d73FoLevels is required for the leveling system."
+            )));
+        }
         player.openInventory(inventory);
         if (playSound) {
             editorSounds.open(player);
@@ -172,31 +177,31 @@ public final class EditorManager implements Listener {
         holder.inventory = inventory;
         fill(inventory);
 
-        inventory.setItem(10, item(target.isFoLevels() ? Material.EXPERIENCE_BOTTLE : Material.CLOCK, "#03fc88Boosters", List.of(
+        inventory.setItem(10, button(player, FoStyle.THEME, target.isFoLevels() ? Material.EXPERIENCE_BOTTLE : Material.CLOCK, "Boosters", List.of(
                 "#ffffffAdd, remove, and edit " + target.display() + " presets."
-        )));
-        inventory.setItem(11, item(Material.BEACON, "#03fc88Active Boosters", List.of("#ffffffView and remove active boosters.")));
-        inventory.setItem(12, item(Material.GRASS_BLOCK, "#03fc88Disabled Worlds", List.of(
+        ), "manage boosters"));
+        inventory.setItem(11, button(player, FoStyle.THEME, Material.BEACON, "Active Boosters", List.of("#ffffffView and remove active boosters."), "view active boosters"));
+        inventory.setItem(12, button(player, FoStyle.THEME, Material.GRASS_BLOCK, "Disabled Worlds", List.of(
                 "#ffffffCurrent: #03fc88" + disabledWorldsDisplay(),
                 "#a7b8b0Click to manage worlds."
-        )));
-        inventory.setItem(13, toggleItem("Stack Boosters", configManager.stackBoosters(), "Combine applicable multipliers."));
-        inventory.setItem(14, teamMultiplierItem());
-        inventory.setItem(15, toggleItem("Team Booster Stacking", configManager.teamBoostersStackWithOtherBoosters(), "Timed team boosters stack with personal, world, and global boosters."));
+        ), "manage disabled worlds"));
+        inventory.setItem(13, toggleItem(player, "Stack Boosters", configManager.stackBoosters(), "Combine applicable multipliers."));
+        inventory.setItem(14, teamMultiplierItem(player));
+        inventory.setItem(15, toggleItem(player, "Team Booster Stacking", configManager.teamBoostersStackWithOtherBoosters(), "Timed team boosters stack with personal, world, and global boosters."));
 
         if (target.isFoLevels()) {
-            inventory.setItem(16, item(Material.BOOK, "#03fc88FoLevels XP", List.of(
+            inventory.setItem(16, button(player, FoStyle.THEME, Material.BOOK, "FoLevels XP", List.of(
                     "#ffffffBoosts all FoLevels XP gain events.",
                     "#a7b8b0Requires FoLevels to be installed.",
                     "#a7b8b0There are no per-event toggles for XP boosters."
-            )));
+            ), "view FoLevels XP events"));
         } else {
-            inventory.setItem(16, item(Material.HOPPER, "#03fc88Events", List.of(
+            inventory.setItem(16, button(player, FoStyle.THEME, Material.HOPPER, "Events", List.of(
                     "#ffffffCurrent: #03fc88" + eventList(globalEnabledEvents()),
                     "#a7b8b0Click to manage boosted events."
-            )));
+            ), "manage boosted events"));
         }
-        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
+        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back(player));
         player.openInventory(inventory);
     }
 
@@ -209,7 +214,7 @@ public final class EditorManager implements Listener {
         for (String id : configManager.boosterIds()) {
             BoosterProfile profile = configManager.profile(id);
             if (profile != null && profile.target() == target && matchesBoosterFilter(id, profile, filter)) {
-                entries.add(EntryBrowserRequest.Entry.of(id, boosterEntryItem(id, profile)));
+                entries.add(EntryBrowserRequest.Entry.of(id, boosterEntryItem(player, id, profile)));
             }
         }
         EntryBrowserRequest request = EntryBrowserRequest.builder()
@@ -219,7 +224,7 @@ public final class EditorManager implements Listener {
                 .filter(filter)
                 .buttons(buttons)
                 .showBack(true)
-                .addButton(item(Material.ANVIL, "#3ecf8eAdd Booster", List.of("#ffffffCreate a new booster preset.")))
+                .addButton(button(player, FoStyle.GOOD, Material.ANVIL, "Add Booster", List.of("#ffffffCreate a new booster preset."), "add a booster"))
                 .context(new BoosterBrowserContext(target))
                 .build();
         EntryBrowserMenus.open(player, request);
@@ -236,31 +241,31 @@ public final class EditorManager implements Listener {
         holder.inventory = inventory;
         fill(inventory);
 
-        inventory.setItem(10, item(profile.material(), "#03fc88Material", List.of("#ffffffCurrent: #03fc88" + profile.material().name())));
-        inventory.setItem(11, toggleItem("Glow", profile.glow(), "Adds an enchant glint."));
-        inventory.setItem(12, item(Material.ITEM_FRAME, "#03fc88Custom Model Data", List.of("#ffffffCurrent: #03fc88" + profile.customModelData())));
-        inventory.setItem(13, item(Material.COMPASS, "#03fc88Type", List.of("#ffffffCurrent: #03fc88" + profile.type().display(), "#a7b8b0Click to cycle.")));
-        inventory.setItem(14, item(Material.EMERALD, "#03fc88Multiplier", List.of("#ffffffCurrent: #03fc88" + activeBoosterService.formatMultiplier(profile.multiplier()) + "x")));
-        inventory.setItem(15, item(Material.CLOCK, "#03fc88Duration", List.of("#ffffffCurrent: #03fc88" + FormatUtil.duration(profile.durationSeconds()))));
-        inventory.setItem(16, item(Material.GRASS_BLOCK, "#03fc88World", List.of(
+        inventory.setItem(10, button(player, FoStyle.THEME, profile.material(), "Material", List.of("#ffffffCurrent: #03fc88" + profile.material().name()), "choose the material"));
+        inventory.setItem(11, toggleItem(player, "Glow", profile.glow(), "Adds an enchant glint."));
+        inventory.setItem(12, button(player, FoStyle.THEME, Material.ITEM_FRAME, "Custom Model Data", List.of("#ffffffCurrent: #03fc88" + profile.customModelData()), "edit custom model data"));
+        inventory.setItem(13, button(player, FoStyle.THEME, Material.COMPASS, "Type", List.of("#ffffffCurrent: #03fc88" + profile.type().display(), "#a7b8b0Click to cycle."), "cycle booster type"));
+        inventory.setItem(14, button(player, FoStyle.THEME, Material.EMERALD, "Multiplier", List.of("#ffffffCurrent: #03fc88" + activeBoosterService.formatMultiplier(profile.multiplier()) + "x"), "edit multiplier"));
+        inventory.setItem(15, button(player, FoStyle.THEME, Material.CLOCK, "Duration", List.of("#ffffffCurrent: #03fc88" + FormatUtil.duration(profile.durationSeconds())), "edit duration"));
+        inventory.setItem(16, button(player, FoStyle.THEME, Material.GRASS_BLOCK, "World", List.of(
                 "#ffffffCurrent: #03fc88" + blankAsCurrent(profile.worldName()),
                 "#a7b8b0Use current to bind on claim."
-        )));
-        inventory.setItem(20, item(Material.NAME_TAG, "#03fc88Item Name", List.of("#ffffffClick to edit display name.")));
-        inventory.setItem(21, item(Material.ENDER_EYE, "#03fc88Bossbar Title", List.of("#ffffffClick to edit title.")));
+        ), "edit booster world"));
+        inventory.setItem(20, button(player, FoStyle.THEME, Material.NAME_TAG, "Item Name", List.of("#ffffffClick to edit display name."), "edit item name"));
+        inventory.setItem(21, button(player, FoStyle.THEME, Material.ENDER_EYE, "Bossbar Title", List.of("#ffffffClick to edit title."), "edit bossbar title"));
         inventory.setItem(22, boosterItemService.createBooster(id));
-        inventory.setItem(23, item(Material.WRITABLE_BOOK, "#03fc88Lore", List.of("#ffffffUse | between lore lines.")));
+        inventory.setItem(23, button(player, FoStyle.THEME, Material.WRITABLE_BOOK, "Lore", List.of("#ffffffUse | between lore lines."), "edit item lore"));
         if (profile.target().isFoLevels()) {
-            inventory.setItem(24, item(Material.EXPERIENCE_BOTTLE, "#03fc88FoLevels XP", List.of(
+            inventory.setItem(24, button(player, FoStyle.THEME, Material.EXPERIENCE_BOTTLE, "FoLevels XP", List.of(
                     "#ffffffTarget: #03fc88FoLevels XP",
                     "#a7b8b0Requires FoLevels.",
                     "#a7b8b0No per-event toggles."
-            )));
+            ), "view FoLevels XP target"));
         } else {
-            inventory.setItem(24, item(Material.HOPPER, "#03fc88Enabled Events", List.of("#ffffffCurrent: #03fc88" + eventList(profile.enabledEvents()), "#a7b8b0Click to configure events.")));
+            inventory.setItem(24, button(player, FoStyle.THEME, Material.HOPPER, "Enabled Events", List.of("#ffffffCurrent: #03fc88" + eventList(profile.enabledEvents()), "#a7b8b0Click to configure events."), "manage enabled events"));
         }
-        inventory.setItem(31, item(Material.RED_DYE, "#ff5d73Delete Booster", List.of("#ffffffClick and type delete to confirm.")));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(5), buttons.back());
+        inventory.setItem(31, button(player, FoStyle.BAD, Material.RED_DYE, "Delete Booster", List.of("#ffffffClick and type delete to confirm."), "delete booster"));
+        inventory.setItem(GuiSlots.bottomMiddleSlot(5), buttons.back(player));
         player.openInventory(inventory);
     }
 
@@ -335,7 +340,7 @@ public final class EditorManager implements Listener {
         List<EntryBrowserRequest.Entry> entries = activeBoosterService.activeBoosters().stream()
                 .filter(booster -> booster.target() == target)
                 .filter(booster -> matchesActiveFilter(booster, filter))
-                .map(booster -> EntryBrowserRequest.Entry.of(booster.id(), activeBoosterEntryItem(booster)))
+                .map(booster -> EntryBrowserRequest.Entry.of(booster.id(), activeBoosterEntryItem(player, booster)))
                 .toList();
         EntryBrowserRequest request = EntryBrowserRequest.builder()
                 .title(title("active", "Active Boosters"))
@@ -344,7 +349,7 @@ public final class EditorManager implements Listener {
                 .filter(filter)
                 .buttons(buttons)
                 .showBack(true)
-                .extraButton(item(Material.SUNFLOWER, "#03fc88Refresh", List.of("#ffffffRefresh active boosters.")))
+                .extraButton(button(player, FoStyle.THEME, Material.SUNFLOWER, "Refresh", List.of("#ffffffRefresh active boosters."), "refresh active boosters"))
                 .withoutAddButton()
                 .context(new ActiveBoosterBrowserContext(target))
                 .build();
@@ -1112,7 +1117,9 @@ public final class EditorManager implements Listener {
 
     private void warnDialogFallback(Player player) {
         NativeDialogAvailability availability = core.nativeDialogs().availability();
-        if (!availability.configEnabled() || availability.canUseNativeDialogs() || !core.nativeDialogs().warnOnFallback()) {
+        if (!availability.configEnabled()
+                || core.nativeDialogs().canUseNativeDialogs(player)
+                || !core.nativeDialogs().warnOnFallback()) {
             return;
         }
         if (!player.hasPermission("fodropbooster.admin")) {
@@ -1230,28 +1237,25 @@ public final class EditorManager implements Listener {
         editorSounds.save(player);
     }
 
-    private ItemStack teamMultiplierItem() {
+    private ItemStack teamMultiplierItem(Player player) {
         boolean enabled = configManager.teamMultiplierEnabled();
         String color = enabled ? "#3ecf8e" : "#ff5d73";
         String status = enabled ? "Enabled" : "Disabled";
-        return item(Material.PLAYER_HEAD, color + "Team Multiplier", List.of(
+        return button(player, enabled ? FoStyle.GOOD : FoStyle.BAD, Material.PLAYER_HEAD, "Team Multiplier", List.of(
                 "#ffffffHidden passive multiplier from additional online teammates.",
                 "#ffffffPer extra member: #03fc88" + activeBoosterService.formatMultiplier(configManager.teamMultiplierPerOnlineMember()) + "x",
                 "#ffffffCap: #03fc88" + activeBoosterService.formatMultiplier(configManager.teamMultiplierCap()) + "x",
                 "",
                 "#a7b8b0Requires FoTeams.",
                 "#a7b8b0Disabled automatically when FoTeams is not installed.",
-                "",
-                color + status,
-                "#a7b8b0Click to toggle."
-        ));
+                "State: " + status
+        ), "toggle team multiplier");
     }
 
-    private ItemStack toggleItem(String name, boolean enabled, String description) {
+    private ItemStack toggleItem(Player player, String name, boolean enabled, String description) {
         Material material = enabled ? Material.LIME_DYE : Material.RED_DYE;
-        String color = enabled ? "#3ecf8e" : "#ff5d73";
-        String status = enabled ? "Enabled" : "Disabled";
-        return item(material, color + name, List.of("#ffffff" + description, "", color + status));
+        String color = enabled ? FoStyle.GOOD : FoStyle.BAD;
+        return button(player, color, material, name, List.of("#ffffff" + description, "State: " + (enabled ? "#3ecf8eON" : "#ff5d73OFF")), "toggle " + name.toLowerCase(Locale.ROOT));
     }
 
     private void fill(Inventory inventory) {
@@ -1261,19 +1265,15 @@ public final class EditorManager implements Listener {
         }
     }
 
-    private ItemStack item(Material material, String name, List<String> lore) {
-        return EditorItemFactory.item(material, name, lore);
-    }
-
-    private ItemStack boosterEntryItem(String id, BoosterProfile profile) {
-        return item(profile.material(), "#03fc88" + id, List.of(
+    private ItemStack boosterEntryItem(Player player, String id, BoosterProfile profile) {
+        return button(player, FoStyle.THEME, profile.material(), id, List.of(
                 "#ffffffTarget: #03fc88" + profile.target().display(),
                 "#ffffffType: #03fc88" + profile.type().display(),
                 "#ffffffMultiplier: #03fc88" + activeBoosterService.formatMultiplier(profile.multiplier()) + "x",
                 "#ffffffDuration: #03fc88" + FormatUtil.duration(profile.durationSeconds()),
                 "",
                 "#a7b8b0Click to edit."
-        ));
+        ), "edit the booster");
     }
 
     private boolean matchesBoosterFilter(String id, BoosterProfile profile, String filter) {
@@ -1284,14 +1284,14 @@ public final class EditorManager implements Listener {
                 || profile.type().display().toLowerCase(Locale.ROOT).contains(query);
     }
 
-    private ItemStack activeBoosterEntryItem(ActiveBooster booster) {
+    private ItemStack activeBoosterEntryItem(Player player, ActiveBooster booster) {
         String scope = switch (booster.type()) {
             case PERSONAL -> booster.ownerName();
             case TEAM -> booster.teamName();
             case WORLD -> booster.worldName();
             case GLOBAL -> "server";
         };
-        return item(Material.BEACON, "#03fc88" + booster.id().substring(0, Math.min(8, booster.id().length())), List.of(
+        return button(player, FoStyle.THEME, Material.BEACON, booster.id().substring(0, Math.min(8, booster.id().length())), List.of(
                 "#ffffffSystem: #03fc88" + booster.target().display(),
                 "#ffffffType: #03fc88" + booster.type().display(),
                 "#ffffffScope: #03fc88" + scope,
@@ -1299,7 +1299,11 @@ public final class EditorManager implements Listener {
                 "#ffffffRemaining: #03fc88" + FormatUtil.duration(booster.remainingMillis(System.currentTimeMillis()) / 1000L),
                 "",
                 "#ff5d73Click to remove."
-        ));
+        ), "remove the booster");
+    }
+
+    private ItemStack button(Player player, String color, Material material, String label, List<String> information, String action) {
+        return EditorItemFactory.button(player, material, color, label, information, action);
     }
 
     private boolean matchesActiveFilter(ActiveBooster booster, String filter) {

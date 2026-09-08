@@ -78,21 +78,19 @@ public final class BoosterItemListener implements Listener {
         consumeOne(player, item);
         ActiveBooster booster = result.booster();
         sounds.playWithPitchVariation(player, "booster.activate", 0.05f);
-        messages.send(player, "messages.activated", replacements(player, booster));
+        Map<String, String> replacements = replacements(player, booster);
+        messages.send(player, "messages.activated", replacements);
         if (booster.type() == BoosterType.GLOBAL && configManager.config().getBoolean("broadcast.global", true)) {
-            Bukkit.broadcastMessage(messages.render(
-                    "messages.activated-global",
-                    "{prefix}{theme}{player} {muted}activated a {theme}{multiplier}x {muted}global {target} booster for {theme}{duration}{muted}.",
-                    replacements(player, booster)
-            ));
+            messages.broadcastConfigured("messages.activated-global", replacements);
         } else if (booster.type() == BoosterType.WORLD && configManager.config().getBoolean("broadcast.world", true)) {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 if (online.getWorld().getName().equalsIgnoreCase(booster.worldName())) {
-                    online.sendMessage(messages.render(
+                    messages.send(
+                            online,
                             "messages.activated-world",
-                            "{prefix}{theme}{player} {muted}activated a {theme}{multiplier}x {muted}{target} booster in {theme}{world} {muted}for {theme}{duration}{muted}.",
-                            replacements(player, booster)
-                    ));
+                            "{prefix}:experience_bottle: {theme}{player} {muted}activated a {theme}{multiplier}x {muted}{target} booster in {theme}{world} {muted}for {theme}{duration}{muted}.",
+                            replacements
+                    );
                 }
             }
         }

@@ -11,6 +11,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.TNTPrimed;
@@ -26,6 +27,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityDropItemEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -52,6 +54,7 @@ public final class DropBoostListener implements Listener {
     private final ConfigManager configManager;
     private final ActiveBoosterService activeBoosterService;
     private final Map<UUID, ShearContext> recentShears = new ConcurrentHashMap<>();
+    private final Map<UUID, List<PickedUpItem>> recentMobPickups = new ConcurrentHashMap<>();
     private final List<ExplosionSource> recentExplosionSources = new ArrayList<>();
     private final List<ExplosionCollectContext> recentExplosionCollections = new ArrayList<>();
 
@@ -64,6 +67,9 @@ public final class DropBoostListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockDrop(BlockDropItemEvent event) {
         if (!configManager.isEventEnabled(EventFamily.BLOCK_BREAK)) {
+            return;
+        }
+        if (isContainerBlock(event.getBlockState().getType(), event.getBlock())) {
             return;
         }
         Player player = event.getPlayer();
@@ -87,14 +93,32 @@ public final class DropBoostListener implements Listener {
         if (!configManager.isEventEnabled(EventFamily.MOB_KILL)) {
             return;
         }
-        if (event.getEntity() instanceof Player) {
+        if (!(event.getEntity() instanceof Mob mob)) {
+            return;
+        }
+        List<ItemStack> protectedDrops = consumeRecentMobPickups(mob);
+        if (mob instanceof org.bukkit.entity.ChestedHorse chestedHorse && chestedHorse.isCarryingChest()) {
             return;
         }
         Player player = event.getEntity().getKiller();
         if (player == null || event.getDrops().isEmpty()) {
             return;
         }
-        multiplyDrops(player, EventFamily.MOB_KILL, event.getDrops());
+        multiplyDrops(player, EventFamily.MOB_KILL, event.getDrops(), protectedDrops);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onMobPickup(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Mob)) {
+            return;
+        }
+        ItemStack stack = event.getItem().getItemStack();
+        if (stack == null || stack.getType().isAir() || stack.getAmount() <= 0) {
+            return;
+        }
+        recentMobPickups.computeIfAbsent(event.getEntity().getUniqueId(), ignored -> new ArrayList<>())
+                .add(new PickedUpItem(stack.clone(), System.currentTimeMillis() + 60_000L));
+        cleanupMobPickups();
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -234,6 +258,11 @@ public final class DropBoostListener implements Listener {
         if (player == null) {
             return;
         }
+        BlockKey spawnBlock = BlockKey.from(event.getLocation());
+        if (context.entityDropBlocks().contains(spawnBlock)
+                || context.containerBlocks().contains(spawnBlock)) {
+            return;
+        }
         ItemStack stack = event.getEntity().getItemStack();
         if (boostStack(player, EventFamily.EXPLOSIONS, stack)) {
             event.getEntity().setItemStack(stack);
@@ -285,7 +314,7 @@ public final class DropBoostListener implements Listener {
         return true;
     }
 
-    private void multiplyDrops(Player player, EventFamily family, List<ItemStack> drops) {
+    private void multiplyDrops(Player player, EventFamily family, List<ItemStack> drops, List<ItemStack> protectedDrops) {
         EffectiveBoost boost = activeBoosterService.effective(player, family);
         if (!boost.active()) {
             return;
@@ -294,6 +323,10 @@ public final class DropBoostListener implements Listener {
         List<ItemStack> multiplied = new ArrayList<>();
         for (ItemStack drop : drops) {
             if (drop == null || drop.getType() == Material.AIR || drop.getAmount() <= 0) {
+                continue;
+            }
+            if (takeProtectedDrop(drop, protectedDrops)) {
+                multiplied.add(drop);
                 continue;
             }
             if (isContainerItem(drop)) {
@@ -306,6 +339,23 @@ public final class DropBoostListener implements Listener {
         }
         drops.clear();
         drops.addAll(multiplied);
+    }
+
+    private boolean takeProtectedDrop(ItemStack drop, List<ItemStack> protectedDrops) {
+        if (protectedDrops == null || protectedDrops.isEmpty()) {
+            return false;
+        }
+        Iterator<ItemStack> iterator = protectedDrops.iterator();
+        while (iterator.hasNext()) {
+            ItemStack protectedDrop = iterator.next();
+            if (protectedDrop != null
+                    && protectedDrop.isSimilar(drop)
+                    && protectedDrop.getAmount() == drop.getAmount()) {
+                iterator.remove();
+                return true;
+            }
+        }
+        return false;
     }
 
     private int boostedAmount(int baseAmount, double multiplier) {
@@ -338,6 +388,10 @@ public final class DropBoostListener implements Listener {
             return meta.getBlockState() instanceof InventoryHolder;
         }
         return false;
+    }
+
+    private boolean isContainerBlock(Material material, Block block) {
+        return isStorageMaterial(material) || (block != null && block.getState() instanceof InventoryHolder);
     }
 
     private boolean isStorageMaterial(Material material) {
@@ -375,10 +429,21 @@ public final class DropBoostListener implements Listener {
             return;
         }
         Set<BlockKey> affectedBlocks = new HashSet<>();
+        Set<BlockKey> entityDropBlocks = explosionEntityDropBlocks(location, blocks);
+        Set<BlockKey> containerBlocks = new HashSet<>();
         for (Block block : blocks) {
             affectedBlocks.add(BlockKey.from(block.getLocation()));
+            if (isContainerBlock(block.getType(), block)) {
+                containerBlocks.add(BlockKey.from(block.getLocation()));
+            }
         }
-        ExplosionCollectContext context = new ExplosionCollectContext(player.getUniqueId(), affectedBlocks, System.currentTimeMillis() + 1_000L);
+        ExplosionCollectContext context = new ExplosionCollectContext(
+                player.getUniqueId(),
+                affectedBlocks,
+                entityDropBlocks,
+                containerBlocks,
+                System.currentTimeMillis() + 1_000L
+        );
         recentExplosionCollections.add(context);
         scheduler.runGlobal(() -> recentExplosionCollections.remove(context));
     }
@@ -386,6 +451,23 @@ public final class DropBoostListener implements Listener {
     private void cleanupShears() {
         long now = System.currentTimeMillis();
         recentShears.values().removeIf(context -> context.expiresAt() < now);
+    }
+
+    private void cleanupMobPickups() {
+        long now = System.currentTimeMillis();
+        recentMobPickups.entrySet().removeIf(entry -> {
+            entry.getValue().removeIf(pickup -> pickup.expiresAt() < now);
+            return entry.getValue().isEmpty();
+        });
+    }
+
+    private List<ItemStack> consumeRecentMobPickups(Mob mob) {
+        cleanupMobPickups();
+        List<PickedUpItem> pickups = recentMobPickups.remove(mob.getUniqueId());
+        if (pickups == null || pickups.isEmpty()) {
+            return List.of();
+        }
+        return pickups.stream().map(PickedUpItem::stack).map(ItemStack::clone).toList();
     }
 
     private void rememberExplosionSource(Player player, Location location, long ttlMillis) {
@@ -449,22 +531,36 @@ public final class DropBoostListener implements Listener {
         if (location == null || location.getWorld() == null) {
             return null;
         }
-        int blockX = location.getBlockX();
-        int blockY = location.getBlockY();
-        int blockZ = location.getBlockZ();
-        String worldName = location.getWorld().getName();
+        BlockKey spawnBlock = BlockKey.from(location);
         for (ExplosionCollectContext context : recentExplosionCollections) {
-            for (int x = blockX - 1; x <= blockX + 1; x++) {
-                for (int y = blockY - 1; y <= blockY + 1; y++) {
-                    for (int z = blockZ - 1; z <= blockZ + 1; z++) {
-                        if (context.affectedBlocks().contains(new BlockKey(worldName, x, y, z))) {
-                            return context;
-                        }
-                    }
-                }
+            if (context.affectedBlocks().contains(spawnBlock)) {
+                return context;
             }
         }
         return null;
+    }
+
+    private Set<BlockKey> explosionEntityDropBlocks(Location location, Collection<Block> blocks) {
+        Set<BlockKey> entityDropBlocks = new HashSet<>();
+        if (location == null || location.getWorld() == null) {
+            return entityDropBlocks;
+        }
+
+        double radius = 4D;
+        for (Block block : blocks) {
+            if (block == null || !block.getWorld().equals(location.getWorld())) {
+                continue;
+            }
+            radius = Math.max(radius, Math.sqrt(location.distanceSquared(block.getLocation())) + 1.5D);
+        }
+        radius = Math.min(16D, radius);
+        for (Entity entity : location.getWorld().getNearbyEntities(location, radius, radius, radius)) {
+            if (entity instanceof Item || entity instanceof Player) {
+                continue;
+            }
+            entityDropBlocks.add(BlockKey.from(entity.getLocation()));
+        }
+        return entityDropBlocks;
     }
 
     private void cleanupExplosions() {
@@ -495,10 +591,19 @@ public final class DropBoostListener implements Listener {
     private record ShearContext(UUID playerId, long expiresAt) {
     }
 
+    private record PickedUpItem(ItemStack stack, long expiresAt) {
+    }
+
     private record ExplosionSource(UUID playerId, Location location, long expiresAt) {
     }
 
-    private record ExplosionCollectContext(UUID playerId, Set<BlockKey> affectedBlocks, long expiresAt) {
+    private record ExplosionCollectContext(
+            UUID playerId,
+            Set<BlockKey> affectedBlocks,
+            Set<BlockKey> entityDropBlocks,
+            Set<BlockKey> containerBlocks,
+            long expiresAt
+    ) {
     }
 
     private record BlockKey(String worldName, int x, int y, int z) {
