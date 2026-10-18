@@ -1118,7 +1118,7 @@ public final class EditorManager implements Listener {
     private void warnDialogFallback(Player player) {
         NativeDialogAvailability availability = core.nativeDialogs().availability();
         if (!availability.configEnabled()
-                || core.nativeDialogs().canUseNativeDialogs(player)
+                || core.nativeDialogs().canUseNativeDialogs()
                 || !core.nativeDialogs().warnOnFallback()) {
             return;
         }

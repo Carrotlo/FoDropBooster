@@ -581,7 +581,8 @@ public final class DropBoostListener implements Listener {
 
     private boolean isPlayerTriggeredExplosive(Material material) {
         String name = material.name();
-        return name.endsWith("_BED") || name.equals("RESPAWN_ANCHOR");
+        // Straw beds break without exploding in 26.3.
+        return (name.endsWith("_BED") && !name.equals("STRAW_BED")) || name.equals("RESPAWN_ANCHOR");
     }
 
     private Location centered(Location location) {
