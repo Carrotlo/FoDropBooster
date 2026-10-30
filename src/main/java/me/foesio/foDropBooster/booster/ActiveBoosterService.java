@@ -3,6 +3,15 @@ package me.foesio.foDropBooster.booster;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.scheduler.FoScheduler;
 import me.foesio.core.sound.FoSoundService;
+import me.foesio.foDropBooster.api.FoDropBoosterActivationSource;
+import me.foesio.foDropBooster.api.FoDropBoosterDropCause;
+import me.foesio.foDropBooster.api.FoDropBoosterEndReason;
+import me.foesio.foDropBooster.api.FoDropBoosterScope;
+import me.foesio.foDropBooster.api.FoDropBoosterSnapshot;
+import me.foesio.foDropBooster.api.FoDropBoosterTarget;
+import me.foesio.foDropBooster.api.event.FoDropBoosterActivatedEvent;
+import me.foesio.foDropBooster.api.event.FoDropBoosterEndedEvent;
+import me.foesio.foDropBooster.api.event.FoDropBoosterPreActivateEvent;
 import me.foesio.foDropBooster.config.ConfigManager;
 import me.foesio.foDropBooster.hook.FoTeamsHook;
 import me.foesio.foDropBooster.util.FormatUtil;
@@ -13,6 +22,7 @@ import org.bukkit.boss.BarStyle;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
@@ -71,6 +81,10 @@ public final class ActiveBoosterService {
     }
 
     public ActivationResult activate(Player player, BoosterItemData data) {
+        return activate(player, data, FoDropBoosterActivationSource.ITEM, null);
+    }
+
+    public ActivationResult activate(Player player, BoosterItemData data, FoDropBoosterActivationSource source, Plugin caller) {
         cleanup(false);
         if (data.target().isFoLevels() && !foLevelsAvailable()) {
             return ActivationResult.fail("folevels-required");
@@ -111,15 +125,48 @@ public final class ActiveBoosterService {
                 data.multiplier(),
                 now,
                 data.durationSeconds() * 1000L,
-                data.enabledEvents(),
+                Set.copyOf(data.enabledEvents()),
                 data.bossbarTitle(),
                 data.bossbarColor(),
                 data.bossbarStyle()
         );
+        FoDropBoosterPreActivateEvent preEvent = new FoDropBoosterPreActivateEvent(player, snapshot(booster), source, caller);
+        Bukkit.getPluginManager().callEvent(preEvent);
+        if (preEvent.isCancelled()) {
+            return ActivationResult.fail("activation-cancelled");
+        }
+        if (!configManager.stackBoosters() && conflicts(player, data.target(), data.type(), worldName, conflictTeamId)) {
+            return ActivationResult.fail("active-exists");
+        }
         active.put(booster.id(), booster);
         invalidateAll();
         save();
         return ActivationResult.success(booster);
+    }
+
+    public void publishActivated(Player player, ActiveBooster booster, FoDropBoosterActivationSource source, Plugin caller) {
+        Bukkit.getPluginManager().callEvent(new FoDropBoosterActivatedEvent(player, snapshot(booster), source, caller));
+    }
+
+    public FoDropBoosterSnapshot snapshot(ActiveBooster booster) {
+        Set<FoDropBoosterDropCause> causes = booster.enabledEvents().stream()
+                .map(event -> FoDropBoosterDropCause.valueOf(event.name()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return new FoDropBoosterSnapshot(
+                booster.id(), booster.boosterId(),
+                booster.target() == BoosterTarget.FOLEVELS_XP ? FoDropBoosterTarget.FOLEVELS_XP : FoDropBoosterTarget.DROPS,
+                FoDropBoosterScope.valueOf(booster.type().name()),
+                booster.ownerId(), booster.ownerName(), booster.worldName(), booster.teamId(), booster.teamName(),
+                booster.multiplier(), booster.startedAtMillis(), booster.expiresAtMillis(), causes
+        );
+    }
+
+    public List<FoDropBoosterSnapshot> activeTimedBoosterSnapshots() {
+        long now = System.currentTimeMillis();
+        return active.values().stream()
+                .filter(booster -> !booster.expired(now))
+                .map(this::snapshot)
+                .toList();
     }
 
     public EffectiveBoost effective(Player player, EventFamily family) {
@@ -292,17 +339,20 @@ public final class ActiveBoosterService {
         if (removed == null) {
             String prefix = id.toLowerCase(Locale.ROOT);
             List<String> matches = active.keySet().stream().filter(key -> key.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();
+            List<ActiveBooster> removedBoosters = new ArrayList<>();
             for (String match : matches) {
-                active.remove(match);
+                removedBoosters.add(active.remove(match));
             }
             if (!matches.isEmpty()) {
                 invalidateAll();
                 save();
+                publishEnded(removedBoosters, FoDropBoosterEndReason.ADMIN_REMOVED);
             }
             return matches.size();
         }
         invalidateAll();
         save();
+        publishEnded(List.of(removed), FoDropBoosterEndReason.ADMIN_REMOVED);
         return 1;
     }
 
@@ -445,15 +495,22 @@ public final class ActiveBoosterService {
     }
 
     private int removeIf(java.util.function.Predicate<ActiveBooster> predicate) {
-        List<String> matches = active.values().stream().filter(predicate).map(ActiveBooster::id).toList();
-        for (String match : matches) {
-            active.remove(match);
+        List<ActiveBooster> matches = active.values().stream().filter(predicate).toList();
+        for (ActiveBooster match : matches) {
+            active.remove(match.id());
         }
         if (!matches.isEmpty()) {
             invalidateAll();
             save();
+            publishEnded(matches, FoDropBoosterEndReason.ADMIN_REMOVED);
         }
         return matches.size();
+    }
+
+    private void publishEnded(List<ActiveBooster> boosters, FoDropBoosterEndReason reason) {
+        for (ActiveBooster booster : boosters) {
+            Bukkit.getPluginManager().callEvent(new FoDropBoosterEndedEvent(snapshot(booster), reason));
+        }
     }
 
     private boolean conflicts(Player player, BoosterTarget target, BoosterType type, String worldName, String teamId) {
@@ -688,6 +745,7 @@ public final class ActiveBoosterService {
         }
         invalidateAll();
         save();
+        publishEnded(expired, FoDropBoosterEndReason.EXPIRED);
     }
 
     private void scheduleCleanup(long generation) {

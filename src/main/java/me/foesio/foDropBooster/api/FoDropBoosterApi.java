@@ -1,7 +1,9 @@
 package me.foesio.foDropBooster.api;
 
 import org.bukkit.plugin.Plugin;
+import org.bukkit.entity.Player;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface FoDropBoosterApi {
@@ -186,4 +188,31 @@ public interface FoDropBoosterApi {
      * @return summed external bonus, so 0.25 means +0.25x
      */
     double teamBoostBonus(String teamId, FoDropBoosterTarget target);
+
+    /**
+     * Returns the effective multiplier for this player's configured drop cause, including timed and external boosts.
+     * Returns 1.0 when no boost applies. Call on the player's owning server thread.
+     */
+    double effectiveDropMultiplier(Player player, FoDropBoosterDropCause cause);
+
+    /**
+     * Returns the effective FoLevels XP multiplier, or 1.0 when FoLevels is unavailable or no boost applies.
+     * Call on the player's owning server thread.
+     */
+    double effectiveFoLevelsXpMultiplier(Player player);
+
+    /**
+     * Activates an exact configured preset without an item, messages, sounds, or broadcasts.
+     * The caller is the requesting plugin, not the owner of the resulting timed booster.
+     * Returns a status and snapshot; unsuccessful requests never create a booster.
+     * Call on the player's owning server thread.
+     */
+    FoDropBoosterActivationResult activatePreset(Plugin caller, Player player, String presetId);
+
+    /**
+     * Returns an immutable snapshot list of stored, unexpired timed boosters, including those not effective for a
+     * particular player. Expired entries are omitted without changing stored state.
+     * Call on the server thread.
+     */
+    List<FoDropBoosterSnapshot> activeTimedBoosters();
 }

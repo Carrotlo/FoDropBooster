@@ -69,10 +69,10 @@ public final class FoDropBooster extends JavaPlugin {
         foTeamsHook = new FoTeamsHook(this);
         activeBoosterService = new ActiveBoosterService(this, core.scheduler(), configManager, messages, sounds, foTeamsHook);
         activeBoosterService.start();
-        api = new DefaultFoDropBoosterApi(activeBoosterService);
-        getServer().getServicesManager().register(FoDropBoosterApi.class, api, this, ServicePriority.Normal);
         bossbarService = new BossbarService(core.scheduler(), configManager, activeBoosterService);
         bossbarService.start();
+        api = new DefaultFoDropBoosterApi(activeBoosterService, configManager, bossbarService);
+        getServer().getServicesManager().register(FoDropBoosterApi.class, api, this, ServicePriority.Normal);
         updateNotices = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID, adminSounds).start();
 
         DropBoostListener dropBoostListener = new DropBoostListener(core.scheduler(), configManager, activeBoosterService);

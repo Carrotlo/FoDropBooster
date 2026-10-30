@@ -8,6 +8,7 @@ import me.foesio.foDropBooster.booster.ActiveBoosterService;
 import me.foesio.foDropBooster.booster.BoosterItemData;
 import me.foesio.foDropBooster.booster.BoosterItemService;
 import me.foesio.foDropBooster.booster.BoosterType;
+import me.foesio.foDropBooster.api.FoDropBoosterActivationSource;
 import me.foesio.foDropBooster.bossbar.BossbarService;
 import me.foesio.foDropBooster.config.ConfigManager;
 import me.foesio.foDropBooster.util.FormatUtil;
@@ -77,6 +78,7 @@ public final class BoosterItemListener implements Listener {
 
         consumeOne(player, item);
         ActiveBooster booster = result.booster();
+        activeBoosterService.publishActivated(player, booster, FoDropBoosterActivationSource.ITEM, null);
         sounds.playWithPitchVariation(player, "booster.activate", 0.05f);
         Map<String, String> replacements = replacements(player, booster);
         messages.send(player, "messages.activated", replacements);
@@ -121,6 +123,7 @@ public final class BoosterItemListener implements Listener {
             case "teams-unavailable" -> "{prefix}{bad}Team boosters require FoTeams.";
             case "no-team" -> "{prefix}{bad}You must be in a team to activate this booster.";
             case "active-exists" -> "{prefix}{bad}A conflicting booster is already active.";
+            case "activation-cancelled" -> "{prefix}{bad}This booster cannot be activated here.";
             default -> "{prefix}{bad}Could not activate that booster.";
         };
     }
