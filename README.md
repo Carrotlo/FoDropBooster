@@ -107,4 +107,51 @@ Listen to `FoDropBoosterPreActivateEvent` to cancel a validated timed activation
 
 Call player queries and preset activation on the player's owning server thread. Call the remaining API methods from server event/scheduler context, never an arbitrary async worker. The event async flag reflects the dispatch thread; expiry can be dispatched by the global scheduler, so an ended-event listener must schedule any player/world work appropriately. Regionized/Folia execution has not been verified for this plugin.
 
+### Event listener example
+
+Inside a Bukkit `Listener` registered by your plugin (import this event class, `org.bukkit.event.EventHandler`, and `org.bukkit.Bukkit` where used):
+
+```java
+@EventHandler
+public void onFoDropBoosterActivated(FoDropBoosterActivatedEvent event) {
+    Bukkit.getLogger().info("Booster activated via " + event.getSource());
+}
+```
+
+### Complete public API method index
+
+Signatures use short type names; import Fo types from this plugin's `api` package and Bukkit types from Bukkit.
+
+#### `FoDropBoosterApi`
+
+```java
+boolean setPlayerDropBoost(Plugin, String, UUID, double);
+boolean setPlayerBoost(Plugin, String, UUID, FoDropBoosterTarget, double);
+boolean setTeamDropBoost(Plugin, String, String, double);
+boolean setTeamBoost(Plugin, String, String, FoDropBoosterTarget, double);
+boolean setGlobalDropBoost(Plugin, String, double);
+boolean setGlobalBoost(Plugin, String, FoDropBoosterTarget, double);
+boolean setWorldDropBoost(Plugin, String, String, double);
+boolean setWorldBoost(Plugin, String, String, FoDropBoosterTarget, double);
+boolean setBoost(Plugin, String, FoDropBoosterTarget, FoDropBoosterScope, String, double);
+boolean removeTeamBoost(Plugin, String);
+boolean removeBoost(Plugin, String);
+int removeTeamBoosts(Plugin);
+int removeBoosts(Plugin);
+double teamDropBoostBonus(String);
+double teamBoostBonus(String, FoDropBoosterTarget);
+double effectiveDropMultiplier(Player, FoDropBoosterDropCause);
+double effectiveFoLevelsXpMultiplier(Player);
+FoDropBoosterActivationResult activatePreset(Plugin, Player, String);
+List<FoDropBoosterSnapshot> activeTimedBoosters();
+```
+
+**Other public contract types:** `FoDropBoosterActivationResult`, `FoDropBoosterActivationSource`, `FoDropBoosterActivationStatus`, `FoDropBoosterDropCause`, `FoDropBoosterEndReason`, `FoDropBoosterScope`, `FoDropBoosterSnapshot`, `FoDropBoosterTarget`.
+
+### Complete Bukkit event index
+
+- `FoDropBoosterActivatedEvent`.
+- `FoDropBoosterEndedEvent`.
+- `FoDropBoosterPreActivateEvent`.
+
 </details>
